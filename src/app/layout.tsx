@@ -2,14 +2,14 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
   title: {
-    default: "Primer — A tutor that learns your child",
-    template: "%s · Primer",
+    default: "Da Vinci — A tutor that learns your child",
+    template: "%s · Da Vinci",
   },
   description:
-    "A thoughtful math tutor that remembers what helps, finds another way, and grows with your child.",
+    "A thoughtful tutor that remembers what helps, finds another way, and grows with your child.",
   manifest: "/manifest.webmanifest",
   icons: { icon: "/icon.svg", apple: "/icon-192.png" },
-  appleWebApp: { capable: true, title: "Primer", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Da Vinci", statusBarStyle: "default" },
 };
 export const viewport: Viewport = {
   width: "device-width",

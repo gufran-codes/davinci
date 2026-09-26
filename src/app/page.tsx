@@ -9,7 +9,7 @@ export default function Home() {
         <nav>
           <Link href="/login">Sign in</Link>
           <ButtonLink href="/signup">
-            Meet Primer
+            Meet Da Vinci
             <ArrowRight size={16} />
           </ButtonLink>
         </nav>
@@ -24,14 +24,14 @@ export default function Home() {
           </h1>
           <p>
             Because understanding doesn’t happen the same way for everyone.
-            Thoughtful math practice that remembers what helps — and finds
-            another way when it doesn’t.
+            Thoughtful learning that remembers what helps — and finds another
+            way when it doesn’t.
           </p>
           <ButtonLink href="/signup">
             Find their starting point
             <ArrowRight size={19} />
           </ButtonLink>
-          <span className="small muted">For curious minds, ages 7–11.</span>
+          <span className="small muted">For curious minds, ages 6–11.</span>
           <div className="marketing-proof">
             <span>
               <Leaf size={18} />
@@ -56,7 +56,7 @@ export default function Home() {
           </h2>
           <div>
             <p>
-              Primer finds out what your child knows, notices where they get
+              Da Vinci finds out what your child knows, notices where they get
               stuck, and remembers which explanations helped.
             </p>
             <p>

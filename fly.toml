@@ -1,0 +1,31 @@
+# Fly.io config for Primer. App name may need changing if taken —
+# `flyctl launch` / deploy will tell you.
+app = "primer-tutor"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+  DATABASE_PATH = "/data/primer.sqlite"
+  # Set after first deploy to the real URL, e.g.:
+  # APP_ORIGIN = "https://primer-tutor.fly.dev"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[[mounts]]
+  source = "primer_data"
+  destination = "/data"
+  initial_size = "1gb"

@@ -46,6 +46,24 @@ test("accounts authenticate, ownership is isolated, session actions persist and 
       .successfulIndependentAttempts,
     1,
   );
+  const persisted = learnerFor(child.id);
+  assert.equal(
+    persisted.states[s.question.conceptId].evidence.at(-1)?.outcome,
+    "independent_success",
+  );
+  assert.ok(
+    persisted.recentLearning.some(
+      (memory) => memory.kind === "assessment" && memory.sessionId === s.id,
+    ),
+  );
+  const sibling = createChild(user.id, {
+    nickname: "Leo",
+    age: 9,
+    grade: 4,
+    goal: "Build confidence",
+  });
+  assert.deepEqual(learnerFor(sibling.id).states, {});
+  assert.deepEqual(learnerFor(sibling.id).recentLearning, []);
   assert.equal(sessionsFor(child.id).length, 1);
   assert.equal(startSession(child, "lesson").id, s.id);
   assert.ok(one("SELECT id FROM practice_attempts WHERE child_id=?", child.id));
@@ -85,39 +103,10 @@ test("key scenario: symbolic struggle → alternate visual success → persisten
   let s = startSession(child, "lesson");
   assert.equal(s.plan.targetConcept, "equivalent_fractions");
   assert.equal(s.decision.strategy, "symbolic_first");
-  while (s.state !== "SESSION_REVIEW") {
-    if (s.step === 2) {
-      assert.equal(s.decision.strategy, "symbolic_first");
-      s = advanceSession(child, s.id, {
-        action: "answer",
-        version: s.version,
-        answer: "Different amounts",
-      });
-      s = advanceSession(child, s.id, {
-        action: "continue",
-        version: s.version,
-      });
-      s = advanceSession(child, s.id, {
-        action: "another",
-        version: s.version,
-      });
-      assert.equal(s.decision.strategy, "visual_fraction_model");
-    }
-    if (s.step === 5)
-      s = advanceSession(child, s.id, {
-        action: "another",
-        version: s.version,
-      });
-    if (s.step === 5 && s.decision.strategy !== "visual_fraction_model")
-      s = advanceSession(child, s.id, {
-        action: "another",
-        version: s.version,
-      });
-    if (s.step === 5 && s.decision.strategy !== "visual_fraction_model")
-      s = advanceSession(child, s.id, {
-        action: "another",
-        version: s.version,
-      });
+  // Explicit support change is assessed, then retained across fresh independent checks.
+  s = advanceSession(child, s.id, { action: "another", version: s.version });
+  assert.equal(s.decision.strategy, "visual_fraction_model");
+  for (let turn = 0; turn < 40 && s.state !== "SESSION_REVIEW"; turn++) {
     s = advanceSession(child, s.id, {
       action: "answer",
       version: s.version,
@@ -125,6 +114,11 @@ test("key scenario: symbolic struggle → alternate visual success → persisten
     });
     s = advanceSession(child, s.id, { action: "continue", version: s.version });
   }
+  assert.equal(
+    s.state,
+    "SESSION_REVIEW",
+    "lesson must terminate without a support loop",
+  );
   s = advanceSession(child, s.id, {
     action: "reflect",
     version: s.version,
@@ -146,7 +140,8 @@ test("key scenario: symbolic struggle → alternate visual success → persisten
   );
   assert.equal(deriveInsight(child, stored).strategy, "visual_fraction_model");
   assert.match(
-    startSession(child, "lesson").decision.personalization,
+    startSession(child, "lesson", "generate_equivalent").decision
+      .personalization,
     /helped last time/,
   );
 });

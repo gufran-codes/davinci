@@ -3,8 +3,11 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
+  Calculator,
   Check,
   Clock,
+  FlaskConical,
+  Globe,
   Lightbulb,
   MoveUpRight,
   Sparkles,
@@ -16,10 +19,23 @@ import {
   Insight,
   Learner,
   LearningSession,
+  Subject,
   strategyNames,
 } from "@/lib/types";
 import { concepts, conceptById } from "@/lib/curriculum";
-import { deriveInsight, masteryLabel, planLesson } from "@/lib/learning";
+import {
+  deriveInsight,
+  masteryLabel,
+  planLesson,
+  strengthsFor,
+  weaknessesFor,
+} from "@/lib/learning";
+const subjectIcons: Record<Subject, typeof Calculator> = {
+  Math: Calculator,
+  English: BookOpen,
+  Science: FlaskConical,
+  "Social Studies": Globe,
+};
 import { ButtonLink, Empty, PageHeading, TextLink } from "./ui";
 export function InsightCard({
   insight,
@@ -46,7 +62,7 @@ export function InsightCard({
           <MoveUpRight size={20} />
         </span>
         <div>
-          <strong>How Primer is adapting</strong>
+          <strong>How Da Vinci is adapting</strong>
           <p>{insight.adaptation}</p>
         </div>
       </div>
@@ -213,7 +229,10 @@ export function Dashboard({
               {child.diagnosticComplete
                 ? "About 10 minutes"
                 : "About 8–12 minutes"}
-              <span>•</span>Math
+              <span>•</span>
+              {child.diagnosticComplete
+                ? (conceptById[plan.targetConcept]?.subject ?? "Math")
+                : "All subjects"}
             </div>
             <Link className="next-link" href={`/learn/${child.id}`}>
               Ready when they are
@@ -243,12 +262,13 @@ export function Dashboard({
           </div>
           <DomainRows learner={learner} />
           <p className="card-footnote">
-            Primer’s current estimate. Understanding takes time.
+            Da Vinci’s current estimate. Understanding takes time.
           </p>
         </section>
         <section className="card">
           <div className="section-title">
             <h3>The last little step</h3>
+
             <TextLink href={`/app/children/${child.id}/sessions`}>
               All sessions
             </TextLink>
@@ -263,7 +283,9 @@ export function Dashboard({
                 ·{" "}
                 {last.kind === "diagnostic"
                   ? "Getting to know you"
-                  : "Math session"}
+                  : last.kind === "homework"
+                    ? "Schoolwork session"
+                    : `${conceptById[last.plan.targetConcept]?.subject ?? "Math"} session`}
               </span>
               <h3 className="last-title">{last.summary?.workedOn}</h3>
               <p className="muted">{last.summary?.improved}</p>
@@ -287,44 +309,42 @@ export function Dashboard({
   );
 }
 export function DomainRows({ learner }: { learner: Learner }) {
+  const subjects: Subject[] = ["Math", "English", "Science", "Social Studies"];
   return (
     <div className="domain-rows">
-      {(["Fractions", "Multiplication", "Division"] as const).map(
-        (domain, i) => {
-          const states = concepts
-            .filter((c) => c.domain === domain)
-            .map((c) => learner.states[c.id])
-            .filter(Boolean);
-          const avg = states.length
-            ? states.reduce((sum, s) => sum + s.masteryScore, 0) / states.length
-            : 0;
-          const label = !states.length
-            ? "Not started"
-            : states.every((s) => masteryLabel(s) === "Secure")
-              ? "Secure"
-              : avg >= 0.4
-                ? "Developing"
-                : "Emerging";
-          return (
-            <div className="domain-row" key={domain}>
-              <span className={`domain-icon domain-${i}`}>
-                {i === 0 ? "½" : i === 1 ? "×" : "÷"}
-              </span>
-              <div>
-                <strong>{domain}</strong>
-                <div className="mastery-track">
-                  <span style={{ width: `${avg * 100}%` }} />
-                </div>
+      {subjects.map((subject, i) => {
+        const Icon = subjectIcons[subject];
+        const states = concepts
+          .filter((c) => c.subject === subject)
+          .map((c) => learner.states[c.id])
+          .filter(Boolean);
+        const avg = states.length
+          ? states.reduce((sum, s) => sum + s.masteryScore, 0) / states.length
+          : 0;
+        const label = !states.length
+          ? "Not started"
+          : states.every((s) => masteryLabel(s) === "Secure")
+            ? "Secure"
+            : avg >= 0.4
+              ? "Developing"
+              : "Emerging";
+        return (
+          <div className="domain-row" key={subject}>
+            <span className={`domain-icon domain-${i}`}>
+              <Icon size={19} />
+            </span>
+            <div>
+              <strong>{subject}</strong>
+              <div className="mastery-track">
+                <span style={{ width: `${avg * 100}%` }} />
               </div>
-              <span
-                className={`status ${label.toLowerCase().replace(" ", "-")}`}
-              >
-                {label}
-              </span>
             </div>
-          );
-        },
-      )}
+            <span className={`status ${label.toLowerCase().replace(" ", "-")}`}>
+              {label}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -344,51 +364,115 @@ export function LearningJourney({
       />
       <p className="notice">
         <Sparkles size={18} />
-        These are Primer’s current estimates, based on practice. They are not
+        These are Da Vinci’s current estimates, based on practice. They are not
         grades or a formal assessment.
       </p>
-      {(["Multiplication", "Division", "Fractions"] as const).map((domain) => (
-        <section className="card journey-section" key={domain}>
-          <div className="section-title">
-            <h2>{domain}</h2>
-            <span className="small muted">
-              {concepts.filter((c) => c.domain === domain).length} connected
-              ideas
-            </span>
-          </div>
-          <div className="concept-list">
-            {concepts
-              .filter((c) => c.domain === domain)
-              .map((c) => {
-                const state = learner.states[c.id],
-                  label = masteryLabel(state);
-                return (
-                  <div className="concept-row" key={c.id}>
-                    <span
-                      className={`concept-dot ${label === "Secure" ? "secure" : ""}`}
-                    >
-                      {label === "Secure" ? <Check size={15} /> : <span />}
-                    </span>
-                    <div>
-                      <h3>{c.name}</h3>
-                      <p>
-                        {c.prerequisites.length
-                          ? `Builds on ${c.prerequisites.map((p) => conceptById[p].name.toLowerCase()).join(" and ")}`
-                          : "A starting foundation"}
-                        {state?.nextReviewAt &&
-                          ` · Review ${new Date(state.nextReviewAt).toLocaleDateString("en", { month: "short", day: "numeric" })}`}
-                      </p>
+      {(["Math", "English", "Science", "Social Studies"] as Subject[]).map(
+        (subject) => (
+          <section className="card journey-section" key={subject}>
+            <div className="section-title">
+              <h2>{subject}</h2>
+              <span className="small muted">
+                {concepts.filter((c) => c.subject === subject).length} connected
+                ideas
+              </span>
+            </div>
+            <div className="concept-list">
+              {concepts
+                .filter((c) => c.subject === subject)
+                .map((c) => {
+                  const state = learner.states[c.id],
+                    label = masteryLabel(state);
+                  return (
+                    <div className="concept-row" key={c.id}>
+                      <span
+                        className={`concept-dot ${label === "Secure" ? "secure" : ""}`}
+                      >
+                        {label === "Secure" ? <Check size={15} /> : <span />}
+                      </span>
+                      <div>
+                        <h3>{c.name}</h3>
+                        <p>
+                          {c.prerequisites.length
+                            ? `Builds on ${c.prerequisites.map((p) => conceptById[p].name.toLowerCase()).join(" and ")}`
+                            : "A starting foundation"}
+                          {state?.nextReviewAt &&
+                            ` · Review ${new Date(state.nextReviewAt).toLocaleDateString("en", { month: "short", day: "numeric" })}`}
+                        </p>
+                      </div>
+                      <span className={`status ${label.toLowerCase()}`}>
+                        {label}
+                      </span>
                     </div>
-                    <span className={`status ${label.toLowerCase()}`}>
-                      {label}
-                    </span>
-                  </div>
-                );
-              })}
-          </div>
-        </section>
-      ))}
+                  );
+                })}
+            </div>
+          </section>
+        ),
+      )}
     </>
+  );
+}
+export function KnowledgeSnapshot({
+  child,
+  learner,
+}: {
+  child: Child;
+  learner: Learner;
+}) {
+  const strengths = strengthsFor(learner).slice(0, 3),
+    developing = Object.values(learner.states)
+      .filter((s) => masteryLabel(s) === "Developing")
+      .sort((a, b) => b.masteryScore - a.masteryScore)
+      .slice(0, 3),
+    needs = weaknessesFor(learner).slice(0, 3);
+  if (!strengths.length && !developing.length && !needs.length) return null;
+  return (
+    <section className="card spaced">
+      <div className="section-title">
+        <h2>What {child.nickname} knows</h2>
+        <Sparkles size={20} />
+      </div>
+      {strengths.length > 0 && (
+        <div className="knowledge-group">
+          <h3>Strengths Da Vinci can build on</h3>
+          {strengths.map((s) => (
+            <p key={s.skillId}>
+              <span className="status secure">
+                {conceptById[s.skillId]?.name ?? s.skillId}
+              </span>{" "}
+              {conceptById[s.skillId]?.subject ?? ""}
+            </p>
+          ))}
+        </div>
+      )}
+      {developing.length > 0 && (
+        <div className="knowledge-group">
+          <h3>Developing right now</h3>
+          {developing.map((s) => (
+            <p key={s.conceptId}>
+              <span className="status developing">
+                {conceptById[s.conceptId]?.name ?? s.conceptId}
+              </span>{" "}
+              {conceptById[s.conceptId]?.subject ?? ""}
+            </p>
+          ))}
+        </div>
+      )}
+      {needs.length > 0 && (
+        <div className="knowledge-group">
+          <h3>Needs a little more support</h3>
+          {needs.map((w) => (
+            <p key={w.skillId}>
+              <span className="status emerging">
+                {conceptById[w.skillId]?.name ?? w.skillId}
+              </span>{" "}
+              {conceptById[w.skillId]?.subject ?? ""}
+            </p>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 export function Insights({
@@ -406,6 +490,7 @@ export function Insights({
         description="No fixed labels. Just careful observations, and better next steps."
       />
       <InsightCard child={child} insight={deriveInsight(child, learner)} full />
+      <KnowledgeSnapshot child={child} learner={learner} />
       <section className="card spaced">
         <div className="section-title">
           <h2>What seems to help</h2>
@@ -414,7 +499,9 @@ export function Insights({
         {learner.strategies.length ? (
           <div className="strategy-list">
             {learner.strategies.map((e) => (
-              <div key={`${e.strategyId}-${e.conceptDomain}`}>
+              <div
+                key={`${e.strategyId}-${e.subject ?? ""}-${e.conceptDomain}`}
+              >
                 <span className="icon-disc">
                   <BookOpen size={20} />
                 </span>
@@ -424,7 +511,7 @@ export function Insights({
                     {e.attempts < 3
                       ? "Still gathering evidence."
                       : e.successfulOutcomes / e.attempts >= 0.65
-                        ? `Recently effective in ${e.conceptDomain.toLowerCase()}.`
+                        ? `Recently effective in ${e.conceptDomain.toLowerCase()}${e.subject ? ` · ${e.subject}` : ""}.`
                         : "Mixed results so far. We’ll try other approaches too."}
                   </p>
                   <small>
@@ -447,7 +534,7 @@ export function Insights({
         <section className="card spaced">
           <h3>Ideas we’re gently checking</h3>
           <p className="muted">
-            A mistake can happen for many reasons. Primer uses fresh examples
+            A mistake can happen for many reasons. Da Vinci uses fresh examples
             before drawing conclusions.
           </p>
           {learner.misconceptions
@@ -499,7 +586,7 @@ export function SessionHistory({
             "Today’s focus": s.summary.workedOn,
             "What improved": s.summary.improved,
             "Still developing": s.summary.developing,
-            "Primer noticed": s.summary.noticed,
+            "Da Vinci noticed": s.summary.noticed,
             "What happens next": s.summary.next,
             "For you": s.summary.parentAction,
           }).map(([title, text]) => (
@@ -508,6 +595,33 @@ export function SessionHistory({
               <p>{text}</p>
             </div>
           ))}
+          {s.teaching?.attempts?.length ? (
+            <div>
+              <span className="eyebrow">HOW TEACHING CHANGED</span>
+              <ol>
+                {s.teaching.attempts.map((attempt, i) => (
+                  <li key={i}>
+                    {strategyNames[attempt.strategyId]} · {attempt.outcome} ·
+                    support level {attempt.assistanceLevel}
+                    {attempt.understandingDelta
+                      ? ` · mastery change ${attempt.understandingDelta.toFixed(2)}`
+                      : ""}
+                  </li>
+                ))}
+              </ol>
+              <p>
+                Hints used: {s.teaching.hintHistory?.length ?? 0}. Answers
+                shown: {s.teaching.revealedQuestions?.length ?? 0}. Fresh
+                independent checks passed:{" "}
+                {
+                  s.teaching.assistanceLedger.filter(
+                    (e) => e.independentlyVerified,
+                  ).length
+                }
+                .
+              </p>
+            </div>
+          ) : null}
           <TextLink href={`/app/children/${child.id}/sessions`}>
             Back to all sessions
           </TextLink>
@@ -545,7 +659,7 @@ export function SessionHistory({
               </Link>
             ))
           ) : (
-            <Empty title="Primer hasn’t learned much here yet.">
+            <Empty title="Da Vinci hasn’t learned much here yet.">
               After a few sessions, you’ll see what {child.nickname} knows and
               which approaches seem to help.
             </Empty>

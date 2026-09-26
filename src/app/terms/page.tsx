@@ -6,13 +6,14 @@ export default function Terms() {
       <p className="eyebrow">EARLY-STAGE MVP TERMS · SEPTEMBER 2026</p>
       <h1>A thoughtful place to practice.</h1>
       <p>
-        Primer is an experimental mathematics tutor for parent-supervised use.
-        The adult account owner is responsible for creating child profiles and
-        supervising access. Children do not create separate accounts.
+        Da Vinci is an experimental tutor for parent-supervised use across
+        elementary Math, English, Science, and Social Studies. The adult account
+        owner is responsible for creating child profiles and supervising access.
+        Children do not create separate accounts.
       </p>
       <h2>Learning support</h2>
       <p>
-        Primer provides practice and explanations. Its mastery estimates and
+        Da Vinci provides practice and explanations. Its mastery estimates and
         observations are provisional, are not scientifically validated, and are
         not formal educational or clinical assessments. AI explanations can
         contain mistakes. Parents should review any concern with an appropriate

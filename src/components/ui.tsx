@@ -7,7 +7,7 @@ export function Brand({ small = false }: { small?: boolean }) {
       <span className="brand-mark">
         <Leaf size={22} strokeWidth={1.8} />
       </span>
-      primer<span className="brand-dot">.</span>
+      da vinci<span className="brand-dot">.</span>
     </Link>
   );
 }

@@ -32,7 +32,7 @@ export function ParentShell({
   const links = [
     { href: "/app", label: "Overview", icon: House },
     { href: `${root}/learning`, label: "Learning journey", icon: BookOpen },
-    { href: `${root}/insights`, label: "How Primer adapts", icon: Lightbulb },
+    { href: `${root}/insights`, label: "How Da Vinci adapts", icon: Lightbulb },
     { href: `${root}/sessions`, label: "Session history", icon: History },
   ];
   useEffect(() => {

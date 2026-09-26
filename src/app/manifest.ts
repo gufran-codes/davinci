@@ -1,8 +1,8 @@
 import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Primer — A little learning, just for you",
-    short_name: "Primer",
+    name: "Da Vinci — A little learning, just for you",
+    short_name: "Da Vinci",
     description: "A tutor that learns how to teach your child.",
     start_url: "/app",
     display: "standalone",

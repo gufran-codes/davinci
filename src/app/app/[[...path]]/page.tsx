@@ -1,3 +1,5 @@
+import { LearningControlsForm } from "@/components/learning-controls";
+import { controlsFor } from "@/server/learning-controls";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Plus, ArrowRight, Shield, Download } from "lucide-react";
@@ -52,9 +54,17 @@ export default async function ParentPage({
             <dt>Email</dt>
             <dd>{user.email}</dd>
             <dt>Subject</dt>
-            <dd>Elementary mathematics · Ages 7–11</dd>
+            <dd>Grades 1–5 · Math, English, Science, Social Studies</dd>
           </dl>
         </section>
+        {children.map((c) => (
+          <div key={c.id}>
+            <h2>
+              {c.nickname} · Grade {c.grade}
+            </h2>
+            <LearningControlsForm childId={c.id} initial={controlsFor(c.id)} />
+          </div>
+        ))}
         <section className="card spaced settings-card">
           <span className="icon-disc">
             <Shield size={21} />

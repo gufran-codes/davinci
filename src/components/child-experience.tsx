@@ -1,5 +1,5 @@
 "use client";
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -8,24 +8,41 @@ import {
   Check,
   Lightbulb,
   LoaderCircle,
+  Mic,
   RefreshCw,
   Upload,
   Camera,
   Clock,
   Leaf,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import type { PublicSession } from "@/server/provider";
 import { api } from "./forms";
+import {
+  listenOnce,
+  matchChoice,
+  micSupported,
+  speak,
+  stopSpeaking,
+  voiceSupported,
+} from "./voice";
 import { MathVisual } from "./math-visuals";
 import { concepts } from "@/lib/curriculum";
 export function StartLesson({
+  conceptId,
   childId,
   diagnostic = false,
   resume = false,
+  subject,
+  label,
 }: {
   childId: string;
+  conceptId?: string;
   diagnostic?: boolean;
   resume?: boolean;
+  subject?: string;
+  label?: string;
 }) {
   const router = useRouter(),
     [busy, setBusy] = useState(false),
@@ -40,6 +57,8 @@ export function StartLesson({
           try {
             await api(`/api/children/${childId}/sessions`, {
               kind: diagnostic ? "diagnostic" : "lesson",
+              subject,
+              conceptId,
             });
             router.push(`/learn/${childId}/session`);
             router.refresh();
@@ -56,11 +75,12 @@ export function StartLesson({
           </>
         ) : (
           <>
-            {resume
-              ? "Pick up where you left off"
-              : diagnostic
-                ? "Let’s find your starting point"
-                : "Start today’s lesson"}
+            {label ??
+              (resume
+                ? "Pick up where you left off"
+                : diagnostic
+                  ? "Let’s find your starting point"
+                  : "Start today’s lesson")}
             <ArrowRight size={21} />
           </>
         )}
@@ -76,6 +96,7 @@ export function StartLesson({
 const phaseNames: Record<string, string> = {
   WARMUP: "A little warm-up",
   DIAGNOSTIC: "Let’s see what you know",
+  PROBE: "What do you remember",
   TEACH: "A new way to see it",
   GUIDED_PRACTICE: "Let’s try together",
   INDEPENDENT_PRACTICE: "Your turn",
@@ -87,10 +108,52 @@ const phaseNames: Record<string, string> = {
 export function Lesson({ initial }: { initial: PublicSession }) {
   const [session, setSession] = useState(initial),
     [answer, setAnswer] = useState(""),
+    [thought, setThought] = useState(""),
+    [noted, setNoted] = useState(false),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [listening, setListening] = useState(false),
+    [voiceOn, setVoiceOn] = useState(
+      () =>
+        typeof window === "undefined" ||
+        window.localStorage.getItem("primer-voice") !== "off",
+    );
   const router = useRouter(),
     heading = useRef<HTMLHeadingElement>(null);
+  const canVoice = voiceSupported();
+  const canMic = micSupported();
+  useEffect(() => {
+    window.localStorage.setItem("primer-voice", voiceOn ? "on" : "off");
+    if (!voiceOn) stopSpeaking();
+  }, [voiceOn]);
+  const spokenMessage = session.content.message;
+  useEffect(() => {
+    if (voiceOn && spokenMessage) speak(spokenMessage);
+    return stopSpeaking;
+  }, [session.question.id, spokenMessage, voiceOn]);
+  useEffect(() => {
+    if (voiceOn && session.feedback) speak(session.feedback);
+  }, [session.feedback, voiceOn]);
+  async function dictate() {
+    if (busy || listening) return;
+    setListening(true);
+    setError("");
+    try {
+      const said = await listenOnce();
+      if (session.question.choices) {
+        const matched = matchChoice(said, session.question.choices);
+        if (matched) setAnswer(matched);
+        else
+          setError(
+            `Heard “${said}” — tap the matching answer, or say it again.`,
+          );
+      } else setAnswer(said);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setListening(false);
+    }
+  }
   async function act(action: string, extra: Record<string, string> = {}) {
     if (busy) return;
     setBusy(true);
@@ -101,7 +164,14 @@ export function Lesson({ initial }: { initial: PublicSession }) {
         { action, version: session.version, ...extra },
       );
       setSession(data.session);
-      if (action === "continue") setAnswer("");
+      if (action === "continue") {
+        setAnswer("");
+        setNoted(false);
+      }
+      if (action === "note" || action === "explain") {
+        setThought("");
+        setNoted(true);
+      }
       if (data.session.state === "COMPLETE") {
         router.push(`/learn/${session.childId}/complete`);
         router.refresh();
@@ -122,8 +192,8 @@ export function Lesson({ initial }: { initial: PublicSession }) {
             ? "Getting to know you"
             : "A little learning, just for you"}
         </span>
-        <span>{review ? "Time to reflect" : `${session.step + 1} of 8`}</span>
-        <progress value={session.step} max={8} aria-label="Lesson progress" />
+        <span>{review ? "Time to reflect" : `${session.step + 1} of 9`}</span>
+        <progress value={session.step} max={9} aria-label="Lesson progress" />
       </div>
       <div className="lesson-paper" aria-busy={busy}>
         <div className="lesson-kicker">
@@ -131,6 +201,17 @@ export function Lesson({ initial }: { initial: PublicSession }) {
             <Leaf size={20} />
           </span>
           {phaseNames[session.state]}
+          {canVoice && (
+            <button
+              className="text-button voice-toggle"
+              onClick={() => setVoiceOn((v) => !v)}
+              aria-pressed={voiceOn}
+              aria-label={voiceOn ? "Turn voice off" : "Turn voice on"}
+              title={voiceOn ? "Turn voice off" : "Turn voice on"}
+            >
+              {voiceOn ? <Volume2 size={18} /> : <VolumeX size={18} />}
+            </button>
+          )}
         </div>
         {review ? (
           <>
@@ -213,12 +294,33 @@ export function Lesson({ initial }: { initial: PublicSession }) {
                         value={answer}
                         onChange={(e) => setAnswer(e.target.value)}
                         maxLength={80}
-                        placeholder="e.g. 3 or 1/2"
+                        placeholder={
+                          session.question.subject === "Math"
+                            ? "e.g. 3 or 1/2"
+                            : "Type your answer"
+                        }
                         autoComplete="off"
                         inputMode="text"
                         required
                       />
                     </label>
+                  )}
+                  {canMic && (
+                    <button
+                      className="button secondary mic-button"
+                      disabled={busy || listening}
+                      type="button"
+                      onClick={dictate}
+                      aria-label="Say your answer"
+                      title="Say your answer"
+                    >
+                      {listening ? (
+                        <LoaderCircle size={19} className="spin" />
+                      ) : (
+                        <Mic size={19} />
+                      )}
+                      {listening ? "Listening…" : "Say it"}
+                    </button>
                   )}
                   <button
                     className="button answer-submit"
@@ -271,6 +373,91 @@ export function Lesson({ initial }: { initial: PublicSession }) {
                   Teach me another way
                 </button>
               </div>
+            )}
+            {!session.feedback && session.prompts.confidenceCheck && (
+              <div
+                className="confidence-row"
+                role="group"
+                aria-label="How sure are you?"
+              >
+                <span>How sure are you?</span>
+                {[
+                  ["guessing", "Guessing"],
+                  ["pretty_sure", "Pretty sure"],
+                  ["very_sure", "Very sure"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    className="text-button"
+                    disabled={busy}
+                    onClick={() => act("note", { confidence: value })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!session.feedback && session.prompts.reasoningProbe && (
+              <form
+                className="thought-form"
+                onSubmit={(e: FormEvent) => {
+                  e.preventDefault();
+                  void act("note", { note: thought });
+                }}
+              >
+                <label>
+                  <span>{session.prompts.reasoningProbe}</span>
+                  <input
+                    aria-label="Your thinking"
+                    value={thought}
+                    onChange={(e) => setThought(e.target.value)}
+                    maxLength={500}
+                    placeholder="Say it in your own words"
+                    autoComplete="off"
+                  />
+                </label>
+                <button
+                  className="text-button"
+                  disabled={busy || !thought.trim()}
+                  type="submit"
+                >
+                  Share my thinking
+                </button>
+              </form>
+            )}
+            {!session.feedback && session.prompts.teachback && (
+              <form
+                className="thought-form"
+                onSubmit={(e: FormEvent) => {
+                  e.preventDefault();
+                  void act("explain", { note: thought });
+                }}
+              >
+                <label>
+                  <span>Teach it back — explain it in your own words.</span>
+                  <input
+                    aria-label="Your explanation"
+                    value={thought}
+                    onChange={(e) => setThought(e.target.value)}
+                    maxLength={500}
+                    placeholder="Pretend you are teaching a friend"
+                    autoComplete="off"
+                  />
+                </label>
+                <button
+                  className="text-button"
+                  disabled={busy || !thought.trim()}
+                  type="submit"
+                >
+                  Explain it back
+                </button>
+              </form>
+            )}
+            {noted && (
+              <p className="hint-note" role="status">
+                <Check size={17} />
+                Noted — this helps Da Vinci teach you better next time.
+              </p>
             )}
             {session.hint && !session.feedback && (
               <p className="hint-note" role="status">
@@ -371,7 +558,7 @@ export function Homework({ childId }: { childId: string }) {
             )}
             <input
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
               aria-label="Choose homework photo"
               onChange={(e) => {
                 const next = e.target.files?.[0];

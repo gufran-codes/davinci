@@ -119,7 +119,7 @@ export function AuthForm({ signup, demo }: { signup: boolean; demo: boolean }) {
         </button>
       </form>
       <p className="auth-switch">
-        {signup ? "Already part of Primer?" : "New to Primer?"}{" "}
+        {signup ? "Already part of Da Vinci?" : "New to Da Vinci?"}{" "}
         <Link href={signup ? "/login" : "/signup"}>
           {signup ? "Sign in" : "Create an account"}
         </Link>
@@ -175,6 +175,7 @@ export function ChildForm() {
         age: Number(f.get("age")),
         grade: Number(f.get("grade")),
         goal: f.get("goal"),
+        subjects: f.getAll("subjects"),
       });
       router.push(`/learn/${child.id}`);
       router.refresh();
@@ -199,7 +200,7 @@ export function ChildForm() {
         <label>
           Age
           <select name="age" defaultValue="9">
-            {[7, 8, 9, 10, 11].map((n) => (
+            {[6, 7, 8, 9, 10, 11].map((n) => (
               <option key={n}>{n}</option>
             ))}
           </select>
@@ -207,7 +208,7 @@ export function ChildForm() {
         <label>
           Grade
           <select name="grade" defaultValue="4">
-            {[1, 2, 3, 4, 5, 6].map((n) => (
+            {[1, 2, 3, 4, 5].map((n) => (
               <option key={n} value={n}>
                 Grade {n}
               </option>
@@ -215,16 +216,30 @@ export function ChildForm() {
           </select>
         </label>
       </div>
+      <fieldset className="subject-picker">
+        <legend>Which subjects need the most help?</legend>
+        {["Math", "English", "Science", "Social Studies"].map((subject) => (
+          <label className="check-label" key={subject}>
+            <input
+              type="checkbox"
+              name="subjects"
+              value={subject}
+              defaultChecked={subject === "Math"}
+            />
+            {subject}
+          </label>
+        ))}
+      </fieldset>
       <label>
         What would you most like help with?
         <select name="goal">
           {[
-            "Build confidence",
-            "Understand difficult concepts",
+            "Fill learning gaps",
+            "Improve confidence",
+            "Stay on grade level",
+            "Get ahead",
+            "Help with schoolwork",
             "Reduce homework frustration",
-            "Catch up",
-            "Stay ahead",
-            "Get personalized math practice",
           ].map((goal) => (
             <option key={goal}>{goal}</option>
           ))}

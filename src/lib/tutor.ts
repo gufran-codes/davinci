@@ -6,7 +6,15 @@ export function authoredContent(session: LearningSession): TutorContent {
     session.assistance === 0;
   let message = "What do you notice? Take your time.";
   let ui = q.visuals;
-  if (independent) {
+  if (
+    d.nextAssessmentType === "teachback" &&
+    ["MASTERY_CHECK", "INDEPENDENT_PRACTICE"].includes(state) &&
+    session.assistance === 0
+  ) {
+    message =
+      "You’ve got this. Can you teach it back — explain it in your own words?";
+    ui = [];
+  } else if (independent) {
     message = "Your turn. Try this one on your own.";
     ui = [
       "fraction_meaning",
@@ -24,7 +32,14 @@ export function authoredContent(session: LearningSession): TutorContent {
           "Let’s look at the amount first. What do the equal parts show?";
         break;
       case "symbolic_first":
-        message = "Look at the numbers. What relationship can you use?";
+        message =
+          q.subject === "English"
+            ? "Look at the exact words. What do they tell you?"
+            : q.subject === "Science"
+              ? "Look at what changed. What caused it?"
+              : q.subject === "Social Studies"
+                ? "Look at the details. What do they show?"
+                : "Look at the numbers. What relationship can you use?";
         ui = [];
         break;
       case "concrete_real_world_example":
@@ -54,6 +69,10 @@ export function authoredContent(session: LearningSession): TutorContent {
     message,
     ui,
     pedagogicalIntent: d.objective,
-    expectedResponseType: q.choices ? "choice" : "math",
+    expectedResponseType: q.choices
+      ? "choice"
+      : q.subject === "Math"
+        ? "math"
+        : "text",
   };
 }

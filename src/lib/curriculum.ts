@@ -1,9 +1,31 @@
-import { Concept, Domain, Question, strategies } from "./types";
-type Entry = [string, string, Domain, number, string[], string];
+import { arithmeticQuestion } from "./teaching/arithmetic-bank";
+import { equivalenceQuestion } from "./teaching/fraction-bank";
+import {
+  expandedConcepts,
+  expandedMisconceptions,
+  contentQuestion,
+  contentById,
+  assessReasoning,
+  rubricFor,
+} from "./teaching/content";
+import { Concept, Domain, Question, Subject, strategies } from "./types";
+import { gradeAnswer } from "./math";
+type Entry = [
+  string,
+  string,
+  Subject,
+  Domain,
+  string,
+  number,
+  string[],
+  string,
+];
 const entries: Entry[] = [
   [
     "equal_groups",
     "Equal groups",
+    "Math",
+    "Multiplication",
     "Multiplication",
     2,
     [],
@@ -12,6 +34,8 @@ const entries: Entry[] = [
   [
     "multiplication_basics",
     "Multiplication as groups",
+    "Math",
+    "Multiplication",
     "Multiplication",
     2,
     ["equal_groups"],
@@ -20,6 +44,8 @@ const entries: Entry[] = [
   [
     "multiplication_by_2",
     "Multiplying by 2",
+    "Math",
+    "Multiplication",
     "Multiplication",
     2,
     ["multiplication_basics"],
@@ -28,6 +54,8 @@ const entries: Entry[] = [
   [
     "multiplication_by_4",
     "Multiplying by 4",
+    "Math",
+    "Multiplication",
     "Multiplication",
     3,
     ["multiplication_by_2"],
@@ -36,6 +64,8 @@ const entries: Entry[] = [
   [
     "multiplication_by_5",
     "Multiplying by 5",
+    "Math",
+    "Multiplication",
     "Multiplication",
     3,
     ["multiplication_basics"],
@@ -44,6 +74,8 @@ const entries: Entry[] = [
   [
     "multiplication_by_10",
     "Multiplying by 10",
+    "Math",
+    "Multiplication",
     "Multiplication",
     3,
     ["multiplication_by_5"],
@@ -52,6 +84,8 @@ const entries: Entry[] = [
   [
     "division_sharing",
     "Sharing equally",
+    "Math",
+    "Division",
     "Division",
     3,
     ["equal_groups"],
@@ -60,6 +94,8 @@ const entries: Entry[] = [
   [
     "division_grouping",
     "Making equal groups",
+    "Math",
+    "Division",
     "Division",
     3,
     ["division_sharing", "multiplication_basics"],
@@ -68,6 +104,8 @@ const entries: Entry[] = [
   [
     "division_inverse",
     "Multiplication & division",
+    "Math",
+    "Division",
     "Division",
     3,
     ["division_grouping"],
@@ -76,6 +114,8 @@ const entries: Entry[] = [
   [
     "equal_parts",
     "Equal parts of a whole",
+    "Math",
+    "Fractions",
     "Fractions",
     2,
     [],
@@ -84,6 +124,8 @@ const entries: Entry[] = [
   [
     "fraction_meaning",
     "Parts of a whole",
+    "Math",
+    "Fractions",
     "Fractions",
     3,
     ["equal_parts"],
@@ -92,6 +134,8 @@ const entries: Entry[] = [
   [
     "numerator",
     "Understanding the numerator",
+    "Math",
+    "Fractions",
     "Fractions",
     3,
     ["fraction_meaning"],
@@ -100,6 +144,8 @@ const entries: Entry[] = [
   [
     "denominator",
     "Understanding the denominator",
+    "Math",
+    "Fractions",
     "Fractions",
     3,
     ["fraction_meaning"],
@@ -108,6 +154,8 @@ const entries: Entry[] = [
   [
     "unit_fractions",
     "One equal part",
+    "Math",
+    "Fractions",
     "Fractions",
     3,
     ["denominator"],
@@ -116,6 +164,8 @@ const entries: Entry[] = [
   [
     "fraction_number_line",
     "Fractions on a number line",
+    "Math",
+    "Fractions",
     "Fractions",
     3,
     ["unit_fractions", "numerator"],
@@ -124,6 +174,8 @@ const entries: Entry[] = [
   [
     "compare_same_denominator",
     "Comparing equal-sized parts",
+    "Math",
+    "Fractions",
     "Fractions",
     3,
     ["numerator", "denominator"],
@@ -132,6 +184,8 @@ const entries: Entry[] = [
   [
     "compare_same_numerator",
     "Comparing different-sized parts",
+    "Math",
+    "Fractions",
     "Fractions",
     4,
     ["unit_fractions"],
@@ -140,6 +194,8 @@ const entries: Entry[] = [
   [
     "equivalent_fractions",
     "Equivalent fractions",
+    "Math",
+    "Fractions",
     "Fractions",
     4,
     ["fraction_meaning", "multiplication_by_2"],
@@ -148,6 +204,8 @@ const entries: Entry[] = [
   [
     "generate_equivalent",
     "Making equivalent fractions",
+    "Math",
+    "Fractions",
     "Fractions",
     4,
     ["equivalent_fractions", "multiplication_by_4"],
@@ -156,6 +214,8 @@ const entries: Entry[] = [
   [
     "simplifying_fractions",
     "Simplifying fractions",
+    "Math",
+    "Fractions",
     "Fractions",
     4,
     ["generate_equivalent", "division_inverse"],
@@ -164,6 +224,8 @@ const entries: Entry[] = [
   [
     "common_denominators",
     "Finding common denominators",
+    "Math",
+    "Fractions",
     "Fractions",
     4,
     ["generate_equivalent", "multiplication_by_4"],
@@ -172,6 +234,8 @@ const entries: Entry[] = [
   [
     "compare_unlike",
     "Comparing unlike fractions",
+    "Math",
+    "Fractions",
     "Fractions",
     4,
     ["common_denominators", "compare_same_denominator"],
@@ -180,6 +244,8 @@ const entries: Entry[] = [
   [
     "adding_like",
     "Adding equal-sized parts",
+    "Math",
+    "Fractions",
     "Fractions",
     3,
     ["fraction_meaning", "numerator"],
@@ -188,6 +254,8 @@ const entries: Entry[] = [
   [
     "subtracting_like",
     "Subtracting equal-sized parts",
+    "Math",
+    "Fractions",
     "Fractions",
     3,
     ["adding_like"],
@@ -196,6 +264,8 @@ const entries: Entry[] = [
   [
     "adding_unlike",
     "Adding unlike fractions",
+    "Math",
+    "Fractions",
     "Fractions",
     5,
     ["common_denominators", "adding_like"],
@@ -204,19 +274,67 @@ const entries: Entry[] = [
   [
     "subtracting_unlike",
     "Subtracting unlike fractions",
+    "Math",
+    "Fractions",
     "Fractions",
     5,
     ["common_denominators", "subtracting_like"],
     "Rename, then subtract unlike fractions.",
   ],
+  [
+    "ela_reading_inference",
+    "Inferring from text evidence",
+    "English",
+    "Reading Comprehension",
+    "Inference",
+    4,
+    [],
+    "Use details in a passage to support an inference.",
+  ],
+  [
+    "ela_vocabulary_context",
+    "Word meaning from context",
+    "English",
+    "Vocabulary",
+    "Context clues",
+    4,
+    ["ela_reading_inference"],
+    "Use surrounding words to figure out an unfamiliar word.",
+  ],
+  [
+    "science_energy_forms",
+    "Potential and kinetic energy",
+    "Science",
+    "Energy",
+    "Energy forms",
+    4,
+    [],
+    "Distinguish stored energy from energy of motion.",
+  ],
+  [
+    "social_map_skills",
+    "Reading maps",
+    "Social Studies",
+    "Geography",
+    "Map skills",
+    4,
+    [],
+    "Read map direction and scale.",
+  ],
 ];
 export const misconceptions = [
+  ...expandedMisconceptions,
   {
     id: "denominator_magnitude",
+    subject: "Math",
     name: "Larger denominator, larger amount",
     description:
       "May treat the denominator as a measure of quantity rather than part size.",
-    conceptIds: ["compare_same_numerator", "unit_fractions"],
+    conceptIds: [
+      "compare_same_numerator",
+      "unit_fractions",
+      "equivalent_fractions",
+    ],
     detectionPatterns: ["Chooses the larger denominator for equal numerators."],
     verificationQuestions: ["Compare 1/3 and 1/6.", "Compare 2/5 and 2/7."],
     remediationStrategies: [
@@ -226,6 +344,7 @@ export const misconceptions = [
   },
   {
     id: "add_both",
+    subject: "Math",
     name: "Adding both parts",
     description: "May add denominators as well as numerators.",
     conceptIds: ["adding_like", "adding_unlike"],
@@ -235,6 +354,7 @@ export const misconceptions = [
   },
   {
     id: "different_means_unequal",
+    subject: "Math",
     name: "Different names, different amounts",
     description: "May not yet recognize equivalent fractions.",
     conceptIds: ["equivalent_fractions", "generate_equivalent"],
@@ -244,6 +364,7 @@ export const misconceptions = [
   },
   {
     id: "ignore_denominator",
+    subject: "Math",
     name: "Comparing only numerators",
     description: "May compare only the top numbers.",
     conceptIds: ["compare_unlike"],
@@ -253,21 +374,62 @@ export const misconceptions = [
   },
   {
     id: "scale_only_one",
+    subject: "Math",
     name: "Changing only one part",
     description: "May scale a numerator without scaling the denominator.",
-    conceptIds: ["generate_equivalent", "simplifying_fractions"],
+    conceptIds: [
+      "equivalent_fractions",
+      "generate_equivalent",
+      "simplifying_fractions",
+    ],
     detectionPatterns: ["Changes one part while keeping the other unchanged."],
     verificationQuestions: ["1/2 = ?/8", "2/3 = ?/12"],
     remediationStrategies: ["pattern_discovery", "guided_questioning"],
   },
+  {
+    id: "literal_only",
+    subject: "English",
+    name: "Literal details instead of inferences",
+    description:
+      "May repeat a detail stated in the passage instead of inferring.",
+    conceptIds: ["ela_reading_inference"],
+    detectionPatterns: ["Chooses a stated detail when an inference is asked."],
+    verificationQuestions: [
+      "What does the character's action suggest?",
+      "What is probably true even though the text never says it?",
+    ],
+    remediationStrategies: [
+      "guided_questioning",
+      "concrete_real_world_example",
+    ],
+  },
+  {
+    id: "energy_used_up",
+    subject: "Science",
+    name: "Energy disappears when used",
+    description: "May believe moving objects lose their energy entirely.",
+    conceptIds: ["science_energy_forms"],
+    detectionPatterns: ["Says a stopped object has no energy at all."],
+    verificationQuestions: [
+      "Where does the moving energy go when the ball stops?",
+      "Does a parked car on a hill have energy?",
+    ],
+    remediationStrategies: [
+      "concrete_real_world_example",
+      "guided_questioning",
+    ],
+  },
 ];
 export const concepts: Concept[] = entries.map(
-  ([id, name, domain, grade, prerequisites, description]) => ({
+  ([id, name, subject, domain, topic, grade, prerequisites, description]) => ({
     id,
     name,
+    subject,
     domain,
+    topic,
     description,
     gradeBand: [grade, Math.min(6, grade + 1)],
+    gradeRange: [grade, Math.min(6, grade + 1)],
     prerequisites,
     learningObjectives: [description],
     misconceptionIds: misconceptions
@@ -279,14 +441,17 @@ export const concepts: Concept[] = entries.map(
     masteryItems: [`${id}:5`, `${id}:6`],
   }),
 );
+concepts.push(...expandedConcepts);
 export const conceptById = Object.fromEntries(concepts.map((c) => [c.id, c]));
-export function getQuestion(id: string, seed = 0, transfer = false): Question {
-  const i = Math.abs(seed) % 5,
-    n = i + 2,
-    d = i + 4;
+function rawQuestion(id: string, seed = 0, transfer = false): Question {
+  const generated = contentQuestion(id, seed, transfer);
+  if (generated) return generated;
+  const concept = conceptById[id];
+  if (!concept) throw new Error(`Unknown concept: ${id}`);
   const q: Question = {
     id: `${id}:${seed}`,
     conceptId: id,
+    subject: concept.subject,
     prompt: "",
     answer: "",
     hint: "",
@@ -295,6 +460,189 @@ export function getQuestion(id: string, seed = 0, transfer = false): Question {
     visuals: [],
     transfer,
   };
+  if (concept.subject === "Math") mathQuestion(q, id, seed, transfer);
+  else {
+    const generate = skillGenerators[id];
+    if (!generate) throw new Error(`Unknown concept: ${id}`);
+    generate(q, Math.abs(seed) % 5, transfer);
+  }
+  return q;
+}
+export function getQuestion(id: string, seed = 0, transfer = false): Question {
+  const q =
+    id === "equivalent_fractions"
+      ? equivalenceQuestion(seed, transfer)
+      : (arithmeticQuestion(id, seed, transfer) ??
+        rawQuestion(id, seed, transfer));
+  q.responseModes = [
+    "voice",
+    q.choices?.length
+      ? "multiple_choice"
+      : q.subject === "Math"
+        ? "numeric"
+        : "short_text",
+    "whiteboard",
+  ];
+  q.purpose = transfer ? "transfer" : seed === 0 ? "diagnosis" : "practice";
+  q.qualityStatus ??= contentById[id] ? "draft" : "authored";
+  q.options ??= q.choices?.map((content, i) => ({
+    id: String.fromCharCode(65 + i),
+    content,
+    correct: gradeSkillAnswer(content, q.answer, q.exact, q.subject),
+    misconceptionId:
+      content === q.misconception?.answer ? q.misconception.id : undefined,
+    diagnosticMeaning:
+      content === q.misconception?.answer
+        ? `Probe ${q.misconception.id}; one selection is only a hypothesis.`
+        : undefined,
+  }));
+  return q;
+}
+// Pluggable per-subject grader. Math keeps the bounded arithmetic parser;
+// other subjects compare normalized text (case and punctuation tolerant).
+export function gradeSkillAnswer(
+  input: string,
+  answer: string,
+  exact = false,
+  subject?: Subject,
+): boolean {
+  if (subject === undefined || subject === "Math")
+    return gradeAnswer(input, answer, exact);
+  const norm = (s: string) =>
+    s
+      .trim()
+      .toLowerCase()
+      .replace(/[.\s]+$/, "")
+      .replace(/\s+/g, " ");
+  return norm(input) === norm(answer);
+}
+export function gradeQuestion(q: Question, input: string): boolean {
+  if (q.responseType === "writing")
+    return assessReasoning(input, rubricFor(q)).sufficient;
+  return gradeSkillAnswer(input, q.answer, q.exact, q.subject);
+}
+type SkillGenerator = (q: Question, i: number, transfer: boolean) => void;
+function fill(
+  q: Question,
+  prompt: string,
+  answer: string,
+  hint: string,
+  explanation: string,
+  concrete: string,
+  choices?: string[],
+  misconception?: { id: string; answer: string },
+) {
+  Object.assign(q, {
+    prompt,
+    answer,
+    hint,
+    explanation,
+    concrete,
+    choices,
+    misconception,
+  });
+}
+const skillGenerators: Record<string, SkillGenerator> = {
+  ela_reading_inference: (q, _i, transfer) =>
+    transfer
+      ? fill(
+          q,
+          "Leo hears thunder and grabs a flashlight before the lights flicker. What can you infer?",
+          "A storm is coming",
+          "What do thunder and flickering lights tell you about the weather?",
+          "Thunder and flickering lights are signs of a storm, even though the text never says the word storm.",
+          "If your friend packs sunscreen and a towel, what might they be about to do?",
+          ["Leo is reading", "A storm is coming", "It is bedtime"],
+          { id: "literal_only", answer: "Leo is reading" },
+        )
+      : fill(
+          q,
+          "Maya grabbed her umbrella and rain boots before running outside. What can you infer about the weather?",
+          "It is probably raining",
+          "What do people use umbrellas and rain boots for?",
+          "Umbrellas and rain boots are used in rain. The text suggests rain without ever saying so.",
+          "If your friend packs sunscreen and a towel, what might they be about to do?",
+          ["Maya ran outside", "It is probably raining", "It is bedtime"],
+          { id: "literal_only", answer: "Maya ran outside" },
+        ),
+  ela_vocabulary_context: (q, _i, transfer) =>
+    transfer
+      ? fill(
+          q,
+          "In the sentence “The feast was abundant, with food covering every table,” what does “abundant” most likely mean?",
+          "plentiful",
+          "Look at the words around it. What does food covering every table tell you?",
+          "Food covering every table means there is more than enough, so abundant means plentiful.",
+          "If a garden is thriving, with tall green plants everywhere, what does thriving mean?",
+        )
+      : fill(
+          q,
+          "In the sentence “The arid desert had not seen rain in months,” what does “arid” most likely mean?",
+          "dry",
+          "What does “had not seen rain in months” tell you about the desert?",
+          "No rain for months means the desert is very dry, so arid means dry.",
+          "If a garden is thriving, with tall green plants everywhere, what does thriving mean?",
+        ),
+  science_energy_forms: (q, _i, transfer) =>
+    transfer
+      ? fill(
+          q,
+          "A ball rolls down a slide. What happens to its stored energy as it moves?",
+          "It changes into moving energy",
+          "Does the stored energy disappear, or does it become something else?",
+          "Stored energy does not vanish. It changes into moving energy as the ball slides.",
+          "A stretched rubber band snaps back. Where did the stored stretch go?",
+          [
+            "It disappears",
+            "It changes into moving energy",
+            "It stays stored forever",
+          ],
+          { id: "energy_used_up", answer: "It disappears" },
+        )
+      : fill(
+          q,
+          "A ball sits still at the top of a slide. What kind of energy does it have before it moves?",
+          "Stored (potential) energy",
+          "The ball is not moving yet. What is waiting inside it?",
+          "A still ball on a hill holds stored energy because of its position. It becomes moving energy on the way down.",
+          "A stretched rubber band is held still. What is waiting in the stretch?",
+          [
+            "Stored (potential) energy",
+            "Moving (kinetic) energy",
+            "No energy at all",
+          ],
+          { id: "energy_used_up", answer: "No energy at all" },
+        ),
+  social_map_skills: (q, _i, transfer) =>
+    transfer
+      ? fill(
+          q,
+          "A map scale says 1 centimetre stands for 1 kilometre. Two parks are 4 centimetres apart on the map. How far apart are they really?",
+          "4 kilometres",
+          "Each centimetre is one kilometre. Count the centimetres.",
+          "4 centimetres × 1 kilometre each = 4 kilometres in the real world.",
+          "Your drawing uses one block for one house. A street 3 blocks long stands for how many houses?",
+          ["4 kilometres", "2 kilometres", "1 centimetre"],
+        )
+      : fill(
+          q,
+          "On most maps, which direction does the arrow marked N point?",
+          "North",
+          "What word starts with N on a compass?",
+          "The N arrow points north. Maps are usually drawn with north at the top.",
+          "Stand up and point to where the sun rises. That direction has its own name too.",
+          ["North", "The nearest city", "The map title"],
+        ),
+};
+function mathQuestion(
+  q: Question,
+  id: string,
+  seed: number,
+  transfer: boolean,
+) {
+  const i = Math.abs(seed) % 5,
+    n = i + 2,
+    d = i + 4;
   const set = (
     prompt: string,
     answer: string,
@@ -543,5 +891,4 @@ export function getQuestion(id: string, seed = 0, transfer = false): Question {
     default:
       throw new Error(`Unknown concept: ${id}`);
   }
-  return q;
 }

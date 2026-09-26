@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+data/*.sqlite*
+data/*.sqlite-shm
+data/*.sqlite-wal
+.env
+test-results
+playwright-report

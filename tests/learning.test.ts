@@ -13,6 +13,7 @@ import {
   deriveInsight,
 } from "../src/lib/learning";
 import { gradeAnswer, parseMath } from "../src/lib/math";
+import { gradeSkillAnswer } from "../src/lib/curriculum";
 import { authoredContent } from "../src/lib/tutor";
 import { Child, LearningSession } from "../src/lib/types";
 const child: Child = {
@@ -22,17 +23,18 @@ const child: Child = {
   age: 9,
   grade: 4,
   goal: "Build confidence",
+  subjects: ["Math"],
   diagnosticComplete: true,
   createdAt: new Date().toISOString(),
 };
-test("all 26 concepts have valid prerequisites and authored items with correct bounded math", () => {
-  assert.equal(concepts.length, 26);
+test("all published skills have valid prerequisites and authored items that self-grade", () => {
+  assert.ok(concepts.length >= 260);
   for (const c of concepts) {
     for (const p of c.prerequisites) assert.ok(conceptById[p]);
     for (let i = 0; i < 7; i++) {
       const q = getQuestion(c.id, i, i > 4);
       assert.ok(q.prompt && q.hint && q.explanation && q.concrete);
-      assert.ok(gradeAnswer(q.answer, q.answer, q.exact));
+      assert.ok(gradeSkillAnswer(q.answer, q.answer, q.exact, q.subject));
     }
   }
   const visit = (id: string, seen: string[]) => {
@@ -93,7 +95,8 @@ test("independent transfer success outweighs hints, scores are bounded, evidence
 test("misconceptions require distinct confirming questions and contrary evidence lowers confidence", () => {
   const q = getQuestion("compare_same_numerator", 0),
     q2 = getQuestion("compare_same_numerator", 1),
-    q3 = getQuestion("compare_same_numerator", 2);
+    q3 = getQuestion("compare_same_numerator", 2),
+    q4 = getQuestion("compare_same_numerator", 3);
   const first = updateMisconception(
     undefined,
     child.id,
@@ -118,6 +121,11 @@ test("misconceptions require distinct confirming questions and contrary evidence
   assert.ok(second.confirmed);
   const third = updateMisconception(second, child.id, q3, q3.answer)!;
   assert.ok(third.confidence < second.confidence);
+  assert.equal(third.status, "confirmed");
+  const resolved = updateMisconception(third, child.id, q4, q4.answer)!;
+  assert.equal(resolved.status, "resolved");
+  assert.equal(resolved.confirmed, false);
+  assert.ok(resolved.resolvedAt);
 });
 test("the same concept produces different strategy and representation for different evidence", () => {
   const maya = emptyLearner();
@@ -148,6 +156,10 @@ test("the same concept produces different strategy and representation for differ
     confidence: 0.45,
     confirmed: false,
     questionIds: ["a"],
+    status: "suspected",
+    lastObservedAt: new Date().toISOString(),
+    resolvedAt: null,
+    evidence: [],
   });
   assert.equal(
     chooseDecision(maya, "equivalent_fractions").strategy,
@@ -265,7 +277,10 @@ test("diagnostic branches down prerequisites and up to related concepts", () => 
     diagnosticNext("common_denominators", false, [], 4),
     "generate_equivalent",
   );
-  assert.equal(diagnosticNext("fraction_meaning", true, [], 4), "numerator");
+  assert.ok(
+    conceptById[diagnosticNext("fraction_meaning", true, [], 4)].gradeBand[1] >=
+      4,
+  );
 });
 test("two consecutive failures probe foundations; two assisted successes fade help", () => {
   const l = emptyLearner();

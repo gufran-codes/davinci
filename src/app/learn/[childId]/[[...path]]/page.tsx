@@ -1,3 +1,6 @@
+import { GradeCurriculum } from "@/components/grade-curriculum";
+import { ConversationLesson } from "@/components/conversation-lesson";
+import { greeting } from "@/server/conversation";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
@@ -11,10 +14,10 @@ import {
 import { pageUser } from "@/server/auth";
 import { learnerFor, ownedChild, sessionsFor } from "@/server/repository";
 import { publicSession } from "@/server/provider";
-import { planLesson } from "@/lib/learning";
+import { planLesson, subjectOverview } from "@/lib/learning";
 import { conceptById } from "@/lib/curriculum";
 import { Brand, ButtonLink } from "@/components/ui";
-import { Homework, Lesson, StartLesson } from "@/components/child-experience";
+import { Homework, StartLesson } from "@/components/child-experience";
 export const dynamic = "force-dynamic";
 export default async function ChildPage({
   params,
@@ -37,7 +40,14 @@ export default async function ChildPage({
   let content;
   if (path[0] === "session") {
     if (!active) redirect(`/learn/${child.id}`);
-    content = <Lesson initial={await publicSession(active)} />;
+    content = (
+      <ConversationLesson
+        initial={await publicSession(greeting(child, active.id), learner, {
+          grade: child.grade,
+          age: child.age,
+        })}
+      />
+    );
   } else if (path[0] === "homework")
     content = active ? (
       <div className="homework-paper">
@@ -98,17 +108,24 @@ export default async function ChildPage({
           Hi, {child.nickname}
           <span className="greeting-sun">✳</span>
         </h1>
-        <p className="child-greeting">Let’s make something make sense today.</p>
+        <p className="child-greeting">
+          Grade {child.grade} · Choose a subject to work on.
+        </p>
         <section className="child-lesson-card">
           <div className="child-lesson-art" aria-hidden="true">
             <div className="fraction-disc" />
-            <span>½ = ²⁄₄</span>
+            <span>
+              {!child.diagnosticComplete
+                ? "✳"
+                : (conceptById[active?.plan.targetConcept ?? plan.targetConcept]
+                    .subject ?? "Math")}
+            </span>
           </div>
           <div>
             <p className="eyebrow">
               {!child.diagnosticComplete
                 ? "LET’S FIND YOUR STARTING POINT"
-                : "TODAY’S LESSON"}
+                : "✨ TODAY’S LEARNING · PERSONALIZED FOR YOU"}
             </p>
             <h2>
               {!child.diagnosticComplete
@@ -121,6 +138,9 @@ export default async function ChildPage({
                 ? "A few questions to see what feels easy and what we can explore together."
                 : plan.reason}
             </p>
+            {!child.diagnosticComplete ? null : (
+              <p className="muted small">Why this today? {plan.reason}</p>
+            )}
             <p className="lesson-meta">
               <Clock size={17} />
               {child.diagnosticComplete
@@ -135,22 +155,48 @@ export default async function ChildPage({
             />
           </div>
         </section>
+        {!child.diagnosticComplete ? null : (
+          <section className="subject-grid">
+            {subjectOverview(learner).map((row) => (
+              <div className="card subject-tile" key={row.subject}>
+                <p className="eyebrow">{row.subject.toUpperCase()}</p>
+                <h3>
+                  {row.lastSkillId
+                    ? conceptById[row.lastSkillId].name
+                    : "Not started yet"}
+                </h3>
+                <p className="muted small">
+                  {row.practiced
+                    ? `${row.practiced} ${row.practiced === 1 ? "idea" : "ideas"} practiced`
+                    : "A fresh place to explore"}
+                </p>
+                <StartLesson
+                  childId={child.id}
+                  subject={row.subject}
+                  label={`Practice ${row.subject}`}
+                  resume={false}
+                />
+              </div>
+            ))}
+          </section>
+        )}
+        <GradeCurriculum grade={child.grade} childId={child.id} />
         <Link className="homework-link" href={`/learn/${child.id}/homework`}>
           <span className="icon-disc peach">
             <Camera size={23} />
           </span>
           <div>
-            <strong>Something tricky in your homework?</strong>
-            <p>Let’s practice it together.</p>
+            <strong>Something tricky in your schoolwork?</strong>
+            <p>📸 Schoolwork — let’s practice it together.</p>
           </div>
           <ArrowRight size={21} />
         </Link>
         {last && (
           <div className="last-time">
-            <span className="eyebrow">LAST TIME</span>
+            <span className="eyebrow">CONTINUE LEARNING</span>
             <p>
-              You worked on {last.summary?.workedOn.toLowerCase()}. We’ll
-              remember where you left off.
+              {conceptById[last.plan.targetConcept]?.subject ?? "Math"} ·{" "}
+              {last.summary?.workedOn}. {last.summary?.next}
             </p>
           </div>
         )}
