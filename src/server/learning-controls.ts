@@ -33,7 +33,10 @@ export function answerAccess(s: LearningSession) {
     memory = memoryFor(s),
     key = questionKey(s);
   const attempts = memory.genuineAttempts[key] ?? 0;
+  const masteryCheck =
+    s.state === "MASTERY_CHECK" || Boolean(memory.activeIndependentCheck);
   return {
+    masteryCheck,
     policy: controls.policy,
     attempts,
     remaining:
@@ -41,9 +44,10 @@ export function answerAccess(s: LearningSession) {
         ? Math.max(0, controls.minimumAttempts - attempts)
         : 0,
     allowed:
-      controls.policy === "immediate" ||
-      (controls.policy === "after_attempts" &&
-        attempts >= controls.minimumAttempts),
+      !masteryCheck &&
+      (controls.policy === "immediate" ||
+        (controls.policy === "after_attempts" &&
+          attempts >= controls.minimumAttempts)),
     revealed: memory.revealedQuestions.includes(key),
   };
 }

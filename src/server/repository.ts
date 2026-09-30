@@ -1,3 +1,4 @@
+import { childPreferencesSchema } from "../lib/child-preferences";
 import { randomUUID } from "node:crypto";
 import {
   Child,
@@ -8,7 +9,8 @@ import {
   Subject,
 } from "../lib/types";
 import { strengthsFor } from "../lib/learning";
-import { all, one, run } from "./db";
+import { all, one, run, transaction } from "./db";
+import { syncSessionPlan } from "../lib/teaching/session-intelligence";
 export const now = () => new Date().toISOString();
 export class HttpError extends Error {
   constructor(
@@ -64,6 +66,33 @@ export function createChild(
     now(),
   );
   return ownedChild(parentId, id);
+}
+export function updateChildPreferences(
+  parentId: string,
+  childId: string,
+  input: unknown,
+) {
+  return transaction(() => {
+    const child = ownedChild(parentId, childId);
+    const data = childPreferencesSchema.parse(input);
+    for (const session of sessionsFor(childId).filter(
+      (s) => !s.completedAt && !s.learningPreferences,
+    )) {
+      session.learningPreferences = {
+        grade: child.grade,
+        subjects: child.subjects ?? ["Math"],
+      };
+      saveSession(session);
+    }
+    run(
+      "UPDATE children SET grade=?,subjects=? WHERE id=? AND parent_id=?",
+      data.grade,
+      JSON.stringify(data.subjects),
+      childId,
+      parentId,
+    );
+    return ownedChild(parentId, childId);
+  });
 }
 export function learnerFor(childId: string): Learner {
   const states = all<{ data: string }>(
@@ -252,6 +281,7 @@ export function sessionById(id: string): LearningSession {
   return normalizedSession(JSON.parse(row.data));
 }
 export function saveSession(s: LearningSession) {
+  syncSessionPlan(s);
   run(
     "INSERT INTO learning_sessions VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,data=excluded.data,completed_at=excluded.completed_at",
     s.id,

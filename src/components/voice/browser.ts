@@ -31,6 +31,9 @@ export class BrowserVoiceTransport implements VoiceTransport {
   private heardChars = 0;
   private speaking = false;
   private speechGeneration = 0;
+  private microphone: MediaStream | null = null;
+  private audioContext: AudioContext | null = null;
+  private meterFrame = 0;
   constructor(private callbacks: VoiceCallbacks) {}
   async connect() {
     const w = window as unknown as Record<string, unknown>,
@@ -48,7 +51,8 @@ export class BrowserVoiceTransport implements VoiceTransport {
         autoGainControl: true,
       },
     });
-    stream.getTracks().forEach((t) => t.stop());
+    this.microphone = stream;
+    this.startMeter(stream);
     this.recognition = new Ctor();
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
@@ -110,6 +114,29 @@ export class BrowserVoiceTransport implements VoiceTransport {
     };
     this.recognition.start();
     this.callbacks.onStatus("listening");
+  }
+  private startMeter(stream: MediaStream) {
+    const AudioContextClass = window.AudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 256;
+    context.createMediaStreamSource(stream).connect(analyser);
+    const samples = new Uint8Array(analyser.frequencyBinCount);
+    const measure = () => {
+      if (!this.active) return;
+      analyser.getByteTimeDomainData(samples);
+      const rms = Math.sqrt(
+        samples.reduce((sum, sample) => {
+          const centered = (sample - 128) / 128;
+          return sum + centered * centered;
+        }, 0) / samples.length,
+      );
+      this.callbacks.onAudioLevel?.(Math.min(1, rms * 5));
+      this.meterFrame = requestAnimationFrame(measure);
+    };
+    this.audioContext = context;
+    measure();
   }
   private isEcho(text: string) {
     if (!this.speaking || !this.current || !text) return false;
@@ -197,6 +224,13 @@ export class BrowserVoiceTransport implements VoiceTransport {
     this.interrupt();
     this.recognition?.abort();
     this.recognition = null;
+    if (typeof window !== "undefined" && window.cancelAnimationFrame)
+      window.cancelAnimationFrame(this.meterFrame);
+    this.microphone?.getTracks().forEach((track) => track.stop());
+    this.microphone = null;
+    void this.audioContext?.close();
+    this.audioContext = null;
+    this.callbacks.onAudioLevel?.(0);
     this.finalText = "";
     this.callbacks.onStatus("idle");
   }

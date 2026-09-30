@@ -29,6 +29,7 @@ export interface VoiceCallbacks {
   onError(message: string): void;
   onInterrupt(): void;
   onMetric(metric: VoiceLatencyMetric): void;
+  onAudioLevel?(level: number): void;
 }
 export interface VoiceTransport {
   connect(): Promise<void>;

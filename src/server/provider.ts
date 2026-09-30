@@ -16,6 +16,11 @@ import {
 import { conceptById, concepts } from "../lib/curriculum";
 import { strengthsFor, weaknessesFor } from "../lib/learning";
 import { noteOpenAIFailure, openAIAvailable } from "./openai-health";
+import {
+  sessionIntelligence,
+  compactWorkingMemory,
+} from "../lib/teaching/session-intelligence";
+import { tutorSpeechProfile } from "../lib/teaching/speech";
 const Output = z.object({
   message: z.string().max(300),
   pedagogicalIntent: z.string().max(160),
@@ -38,6 +43,10 @@ export function buildTeachingState(
   learner: Learner,
   student: { grade: number; age: number },
 ): TeachingState {
+  student = {
+    ...student,
+    grade: session.learningPreferences?.grade ?? student.grade,
+  };
   const concept = conceptById[session.question.conceptId];
   const state = learner.states[session.question.conceptId];
   const memory = memoryFor(session);
@@ -135,6 +144,8 @@ export function buildTeachingState(
       strategiesAlreadyTried: memory.signals.attemptedStrategies,
       teachingAttempts: memory.attempts.slice(-8),
       recentStudentReasoning: memory.recentReasoning,
+      recentTutorQuestions: memory.recentTutorQuestions,
+      workingMemory: compactWorkingMemory(session),
       hintHistory: memory.hintHistory.slice(-8),
       studentBoard: boardFor(session.id)
         .objects.slice(-20)
@@ -265,6 +276,10 @@ export async function publicSession(
   learner: Learner,
   student: { grade: number; age: number },
 ) {
+  student = {
+    ...student,
+    grade: s.learningPreferences?.grade ?? student.grade,
+  };
   const memory = memoryFor(s);
   let content = s.conversation
     ? authoredContent(s)
@@ -303,8 +318,19 @@ export async function publicSession(
       process.env.NODE_ENV === "development"
         ? {
             goal: memory.goal,
+            workingMemory: sessionIntelligence(s),
             teachingMove: s.conversation?.teachingMove ?? null,
             cognitiveLoad: s.conversation?.cognitiveLoad ?? null,
+            speechProfile: s.conversation
+              ? tutorSpeechProfile({
+                  strategy: s.decision.strategy,
+                  subject: s.question.subject,
+                  grade: student.grade,
+                  intent: s.conversation.intent,
+                  teachingMove: s.conversation.teachingMove,
+                  cognitiveLoad: s.conversation.cognitiveLoad,
+                })
+              : null,
             verification: s.conversation?.verification ?? null,
             assistanceLedger: memory.assistanceLedger.slice(-8),
             pendingIndependentCheck: memory.pendingIndependentCheck ?? null,

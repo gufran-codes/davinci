@@ -99,7 +99,11 @@ npm run curriculum -- validate
 npm run curriculum -- draft 4 Science Energy
 npm run curriculum -- review SKILL_ID "Reviewer name"
 npm run curriculum -- approve SKILL_ID "Reviewer name"
+npm run curriculum:import -- content/curriculum/samples/grades-6-10-architecture.json --dry-run
 ```
+
+The normalized Grades 1–10, optional high-school course, provenance, and future
+Supabase architecture is documented in `docs/curriculum-architecture.md`.
 
 ## Demo account
 

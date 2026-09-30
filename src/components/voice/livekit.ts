@@ -15,6 +15,7 @@ export class LiveKitVoiceTransport implements VoiceTransport {
   private lastServerTurn = "";
   private intentionalDisconnect = false;
   private agentReady: (() => void) | undefined;
+  private levelTimer: ReturnType<typeof setInterval> | undefined;
   constructor(
     private url: string,
     private token: string,
@@ -101,6 +102,13 @@ export class LiveKitVoiceTransport implements VoiceTransport {
     await this.room.connect(this.url, this.token);
     await this.room.startAudio();
     await this.room.localParticipant.setMicrophoneEnabled(true);
+    this.levelTimer = setInterval(
+      () =>
+        this.callbacks.onAudioLevel?.(
+          Math.min(1, this.room.localParticipant.audioLevel ?? 0),
+        ),
+      80,
+    );
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
@@ -139,6 +147,8 @@ export class LiveKitVoiceTransport implements VoiceTransport {
     this.intentionalDisconnect = true;
     this.elements.forEach((e) => e.remove());
     this.elements = [];
+    clearInterval(this.levelTimer);
+    this.callbacks.onAudioLevel?.(0);
     void this.room.disconnect();
   }
 }

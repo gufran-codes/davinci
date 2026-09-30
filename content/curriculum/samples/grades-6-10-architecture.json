@@ -1,0 +1,503 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "id": "architecture-sample-2026",
+    "version": "architecture-sample-2026.1",
+    "status": "draft",
+    "notes": "Representative records for schema and import verification. Not approved for tutoring."
+  },
+  "sources": [
+    {
+      "id": "davinci-internal-sample",
+      "name": "Da Vinci internal architecture sample",
+      "framework": null,
+      "url": "https://example.invalid/davinci-internal-sample",
+      "version": "2026.1",
+      "year": 2026,
+      "license": {
+        "name": "Internal original test data",
+        "url": null,
+        "usageRights": "internal_original",
+        "attribution": "Da Vinci curriculum architecture sample"
+      }
+    }
+  ],
+  "courses": [
+    {
+      "id": "algebra-1",
+      "code": "ALG1",
+      "name": "Algebra I",
+      "subject": "Math",
+      "recommendedGradeMin": 8,
+      "recommendedGradeMax": 10,
+      "description": "Foundational secondary algebra course."
+    },
+    {
+      "id": "geometry",
+      "code": "GEO",
+      "name": "Geometry",
+      "subject": "Math",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 10,
+      "description": "Secondary geometry course."
+    },
+    {
+      "id": "biology",
+      "code": "BIO",
+      "name": "Biology",
+      "subject": "Science",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 10,
+      "description": "Secondary life science course."
+    },
+    {
+      "id": "chemistry",
+      "code": "CHEM",
+      "name": "Chemistry",
+      "subject": "Science",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 10,
+      "description": "Secondary physical science course."
+    },
+    {
+      "id": "english-1",
+      "code": "ENG1",
+      "name": "English I",
+      "subject": "English",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 9,
+      "description": "Grade 9 English Language Arts course."
+    },
+    {
+      "id": "english-2",
+      "code": "ENG2",
+      "name": "English II",
+      "subject": "English",
+      "recommendedGradeMin": 10,
+      "recommendedGradeMax": 10,
+      "description": "Grade 10 English Language Arts course."
+    },
+    {
+      "id": "world-history",
+      "code": "WH",
+      "name": "World History",
+      "subject": "Social Studies",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 10,
+      "description": "Secondary world history course."
+    },
+    {
+      "id": "us-history",
+      "code": "USH",
+      "name": "US History",
+      "subject": "Social Studies",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 10,
+      "description": "Secondary United States history course."
+    },
+    {
+      "id": "civics",
+      "code": "CIV",
+      "name": "Civics",
+      "subject": "Social Studies",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 10,
+      "description": "Secondary civics and government course."
+    }
+  ],
+  "misconceptions": [],
+  "skills": [
+    {
+      "id": "sample_g6_ratio_reasoning",
+      "name": "Reason about equivalent ratios",
+      "description": "Use multiplicative reasoning to compare equivalent ratios.",
+      "subject": "Math",
+      "courseId": null,
+      "recommendedGradeMin": 6,
+      "recommendedGradeMax": 7,
+      "domain": {
+        "id": "math-ratios",
+        "code": "RATIO",
+        "name": "Ratios and Proportional Reasoning"
+      },
+      "topic": {
+        "id": "math-ratios-equivalence",
+        "code": "EQUIV",
+        "name": "Equivalent Ratios"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_g6_ratio_reasoning_obj1",
+          "text": "Determine whether two simple ratios describe the same relationship."
+        }
+      ],
+      "prerequisiteSkillIds": ["g5_math_fraction_operations"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": [
+        "concrete_real_world_example",
+        "pattern_discovery",
+        "guided_questioning"
+      ],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    },
+    {
+      "id": "sample_g7_ela_claim_evidence",
+      "name": "Connect claims and evidence",
+      "description": "Evaluate whether textual evidence supports a stated claim.",
+      "subject": "English",
+      "courseId": null,
+      "recommendedGradeMin": 7,
+      "recommendedGradeMax": 8,
+      "domain": {
+        "id": "ela-argument",
+        "code": "ARG",
+        "name": "Argument and Evidence"
+      },
+      "topic": {
+        "id": "ela-argument-support",
+        "code": "SUPPORT",
+        "name": "Evidence and Support"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_g7_ela_claim_evidence_obj1",
+          "text": "Explain how a relevant detail supports or fails to support a claim."
+        }
+      ],
+      "prerequisiteSkillIds": ["g5_english_compare_texts"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": [
+        "evidence_first",
+        "guided_annotation",
+        "compare_contrast"
+      ],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    },
+    {
+      "id": "sample_g8_science_force_models",
+      "name": "Model balanced and unbalanced forces",
+      "description": "Use a model to explain how net force changes motion.",
+      "subject": "Science",
+      "courseId": null,
+      "recommendedGradeMin": 8,
+      "recommendedGradeMax": 8,
+      "domain": {
+        "id": "science-forces",
+        "code": "FORCE",
+        "name": "Forces and Motion"
+      },
+      "topic": {
+        "id": "science-net-force",
+        "code": "NET",
+        "name": "Net Force"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_g8_science_force_models_obj1",
+          "text": "Predict a motion change from the direction and relative size of forces."
+        }
+      ],
+      "prerequisiteSkillIds": ["g5_science_forces"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": [
+        "diagram_first",
+        "guided_questioning",
+        "compare_contrast"
+      ],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    },
+    {
+      "id": "sample_g8_social_source_evaluation",
+      "name": "Evaluate historical sources",
+      "description": "Compare sourcing and evidence when evaluating historical accounts.",
+      "subject": "Social Studies",
+      "courseId": null,
+      "recommendedGradeMin": 8,
+      "recommendedGradeMax": 9,
+      "domain": {
+        "id": "social-historical-inquiry",
+        "code": "INQUIRY",
+        "name": "Historical Inquiry"
+      },
+      "topic": {
+        "id": "social-source-evaluation",
+        "code": "SOURCE",
+        "name": "Source Evaluation"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_g8_social_source_evaluation_obj1",
+          "text": "Compare two accounts using source, context, and supporting evidence."
+        }
+      ],
+      "prerequisiteSkillIds": ["g5_social_studies_sources"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": [
+        "evidence_first",
+        "compare_contrast",
+        "guided_annotation"
+      ],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    },
+    {
+      "id": "sample_alg1_linear_equations",
+      "name": "Solve linear equations in one variable",
+      "description": "Use equivalent transformations to solve and verify linear equations.",
+      "subject": "Math",
+      "courseId": "algebra-1",
+      "recommendedGradeMin": 8,
+      "recommendedGradeMax": 10,
+      "domain": {
+        "id": "alg1-equations",
+        "code": "EQ",
+        "name": "Equations and Inequalities"
+      },
+      "topic": {
+        "id": "alg1-one-variable",
+        "code": "ONEVAR",
+        "name": "One-variable Equations"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_alg1_linear_equations_obj1",
+          "text": "Solve a multi-step linear equation and verify the solution by substitution."
+        }
+      ],
+      "prerequisiteSkillIds": ["sample_g6_ratio_reasoning"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": [
+        "symbolic_first",
+        "worked_example",
+        "error_analysis"
+      ],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    },
+    {
+      "id": "sample_geometry_congruence",
+      "name": "Reason about congruent figures",
+      "description": "Use rigid transformations to justify whether figures are congruent.",
+      "subject": "Math",
+      "courseId": "geometry",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 10,
+      "domain": {
+        "id": "geometry-transformations",
+        "code": "TRANS",
+        "name": "Transformations"
+      },
+      "topic": {
+        "id": "geometry-congruence",
+        "code": "CONG",
+        "name": "Congruence"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_geometry_congruence_obj1",
+          "text": "Describe a sequence of rigid transformations that maps one figure to another."
+        }
+      ],
+      "prerequisiteSkillIds": ["g5_math_coordinates"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": [
+        "diagram_first",
+        "compare_contrast",
+        "guided_questioning"
+      ],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    },
+    {
+      "id": "sample_biology_cell_systems",
+      "name": "Explain interactions within cell systems",
+      "description": "Use evidence and models to explain how cell structures support system functions.",
+      "subject": "Science",
+      "courseId": "biology",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 10,
+      "domain": {
+        "id": "biology-cells",
+        "code": "CELL",
+        "name": "Cell Biology"
+      },
+      "topic": {
+        "id": "biology-cell-systems",
+        "code": "SYSTEM",
+        "name": "Cell Systems"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_biology_cell_systems_obj1",
+          "text": "Connect a cell structure to its role in maintaining a functioning system."
+        }
+      ],
+      "prerequisiteSkillIds": ["g5_science_investigation"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": ["diagram_first", "evidence_first", "teach_back"],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    },
+    {
+      "id": "sample_chemistry_particle_models",
+      "name": "Use particle models to explain matter",
+      "description": "Use particle-level representations to explain observable properties and changes.",
+      "subject": "Science",
+      "courseId": "chemistry",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 10,
+      "domain": {
+        "id": "chemistry-matter",
+        "code": "MATTER",
+        "name": "Matter and Its Interactions"
+      },
+      "topic": {
+        "id": "chemistry-particle-models",
+        "code": "PARTICLE",
+        "name": "Particle Models"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_chemistry_particle_models_obj1",
+          "text": "Relate a particle model to an observed physical change without changing substance identity."
+        }
+      ],
+      "prerequisiteSkillIds": ["g5_science_investigation"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": [
+        "diagram_first",
+        "concrete_to_abstract",
+        "compare_contrast"
+      ],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    },
+    {
+      "id": "sample_english1_argument_analysis",
+      "name": "Analyze an author's argument",
+      "description": "Analyze how claims, evidence, and reasoning work together in an argument.",
+      "subject": "English",
+      "courseId": "english-1",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 9,
+      "domain": {
+        "id": "english-argument",
+        "code": "ARG",
+        "name": "Argument Analysis"
+      },
+      "topic": {
+        "id": "english-claims-evidence",
+        "code": "CLAIM",
+        "name": "Claims and Evidence"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_english1_argument_analysis_obj1",
+          "text": "Evaluate whether evidence is relevant and sufficient for an author's claim."
+        }
+      ],
+      "prerequisiteSkillIds": ["sample_g7_ela_claim_evidence"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": [
+        "evidence_first",
+        "guided_annotation",
+        "error_analysis"
+      ],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    },
+    {
+      "id": "sample_english2_comparative_analysis",
+      "name": "Develop a comparative literary analysis",
+      "description": "Develop and support a comparison of how two texts treat a shared idea.",
+      "subject": "English",
+      "courseId": "english-2",
+      "recommendedGradeMin": 10,
+      "recommendedGradeMax": 10,
+      "domain": {
+        "id": "english-literary-analysis",
+        "code": "LIT",
+        "name": "Literary Analysis"
+      },
+      "topic": {
+        "id": "english-comparative-analysis",
+        "code": "COMPARE",
+        "name": "Comparative Analysis"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_english2_comparative_analysis_obj1",
+          "text": "Support a comparative claim with relevant evidence from both texts."
+        }
+      ],
+      "prerequisiteSkillIds": ["sample_english1_argument_analysis"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": [
+        "compare_contrast",
+        "evidence_first",
+        "guided_annotation"
+      ],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    },
+    {
+      "id": "sample_world_history_causation",
+      "name": "Evaluate historical causation",
+      "description": "Evaluate how multiple causes contributed to a historical development.",
+      "subject": "Social Studies",
+      "courseId": "world-history",
+      "recommendedGradeMin": 9,
+      "recommendedGradeMax": 10,
+      "domain": {
+        "id": "world-history-analysis",
+        "code": "ANALYSIS",
+        "name": "Historical Analysis"
+      },
+      "topic": {
+        "id": "world-history-causation",
+        "code": "CAUSE",
+        "name": "Causation"
+      },
+      "learningObjectives": [
+        {
+          "id": "sample_world_history_causation_obj1",
+          "text": "Use evidence to distinguish immediate causes from longer-term conditions."
+        }
+      ],
+      "prerequisiteSkillIds": ["sample_g8_social_source_evaluation"],
+      "misconceptionIds": [],
+      "teachingStrategyIds": [
+        "evidence_first",
+        "diagram_first",
+        "compare_contrast"
+      ],
+      "standards": [],
+      "assessment": {},
+      "status": "draft",
+      "sourceId": "davinci-internal-sample"
+    }
+  ]
+}

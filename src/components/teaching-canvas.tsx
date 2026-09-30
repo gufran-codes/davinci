@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
 import type { CanvasCue } from "@/lib/teaching/types";
+import type { CanvasAction } from "@/lib/teaching/whiteboard";
 import type { Visual } from "@/lib/types";
 import { MathVisual } from "./math-visuals";
+import { DynamicMathCanvas } from "./dynamic-math-canvas";
 function CanvasVisual({
   visual,
   onAnswer,
@@ -165,12 +167,15 @@ export function TeachingCanvas({
   cues,
   words,
   onAnswer,
+  actions = [],
 }: {
   cues: CanvasCue[];
   words: number;
   onAnswer: (answer: string) => void;
+  actions?: CanvasAction[];
 }) {
   const active = cues.filter((c) => c.atWord <= words),
+    activeActions = actions.filter((action) => action.atWord <= words),
     upcomingModel = cues.find(
       (c) => c.action === "show" && c.visuals.length > 0,
     ),
@@ -189,7 +194,9 @@ export function TeachingCanvas({
       aria-label="Teaching canvas"
     >
       <span className="eyebrow">LET’S LOOK AT IT TOGETHER</span>
-      {model?.visuals.length ? (
+      {activeActions.length ? (
+        <DynamicMathCanvas actions={activeActions} />
+      ) : model?.visuals.length ? (
         <div className="canvas-models">
           {model.visuals.map((v, i) => (
             <CanvasVisual

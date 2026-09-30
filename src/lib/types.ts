@@ -134,6 +134,10 @@ export interface Concept {
   gradeRange: number[];
   description: string;
   gradeBand: [number, number];
+  /** Recommended placement, not an eligibility boundary. */
+  recommendedGradeRange?: [number, number];
+  /** Present for course-scoped secondary skills such as Algebra I. */
+  courseId?: string;
   prerequisites: string[];
   learningObjectives: string[];
   misconceptionIds: string[];
@@ -313,6 +317,7 @@ export const phases = [
 ] as const;
 export type Phase = (typeof phases)[number] | "REMEDIATION";
 export interface LearningSession {
+  learningPreferences?: { grade: number; subjects: Subject[] };
   id: string;
   childId: string;
   kind: "lesson" | "diagnostic" | "homework";

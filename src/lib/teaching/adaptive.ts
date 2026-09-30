@@ -1,4 +1,4 @@
-import { fractionSequence } from "./whiteboard";
+import { fractionSequence, visualActionSequence } from "./whiteboard";
 import { conceptById, getQuestion } from "../curriculum";
 import { chooseDecision, updateStrategy } from "../learning";
 import type { Child, Learner, LearningSession, Visual } from "../types";
@@ -9,6 +9,7 @@ import type { CanvasCue, TeachingMemory } from "./types";
 export function memoryFor(s: LearningSession): TeachingMemory {
   const memory = (s.teaching ??= {
     recentReasoning: [],
+    recentTutorQuestions: [],
     attempts: [],
     hintHistory: [],
     genuineAttempts: {},
@@ -32,6 +33,7 @@ export function memoryFor(s: LearningSession): TeachingMemory {
     },
   });
   memory.recentReasoning ??= [];
+  memory.recentTutorQuestions ??= [];
   memory.attempts ??= [];
   memory.hintHistory ??= [];
   memory.genuineAttempts ??= {};
@@ -143,9 +145,17 @@ function checkpointPrompt(s: LearningSession) {
     case "concrete_real_world_example":
     case "analogy":
     case "story_context":
-      return fraction
-        ? "What stayed the same even when the number of pieces changed?"
-        : "What part of that story matches the question?";
+      if (fraction)
+        return "What stayed the same even when the number of pieces changed?";
+      if (q.subject === "English")
+        return q.responseType === "writing"
+          ? "Which idea from the example could strengthen your own writing?"
+          : "Which words in the text support your thinking?";
+      if (q.subject === "Science")
+        return "Which observation from the example helps explain what happened?";
+      if (q.subject === "Social Studies")
+        return "Which fact, place, or event from the example helps you decide?";
+      return "Which quantity in the example matches the one you need to find?";
     case "worked_example":
     case "partial_worked_example":
     case "step_by_step_scaffold":
@@ -508,6 +518,13 @@ export function spokenTeaching(s: LearningSession) {
       label: "Look here",
       highlight: material.attention,
     });
+  let canvasActions = visualActionSequence(
+    visuals,
+    m.hintLevel >= 6 ||
+      ["worked_example", "partial_worked_example"].includes(
+        s.decision.strategy,
+      ),
+  );
   if (
     s.question.conceptId === "equivalent_fractions" &&
     s.decision.strategy === "visual_fraction_model" &&
@@ -517,6 +534,7 @@ export function spokenTeaching(s: LearningSession) {
     const d = s.question.prompt.includes("1/3") ? 2 : 3;
     message = `Try a different example: one of ${d} equal parts is colored. Now split every part in two. There are ${d * 2} parts, with two colored. The amount stays the same. What changed, and what stayed the same?`;
     const actions = fractionSequence(1, d);
+    canvasActions = actions;
     cues.splice(
       0,
       cues.length,
@@ -550,5 +568,10 @@ export function spokenTeaching(s: LearningSession) {
     );
     visuals = [{ type: "fraction_bar", numerator: 1, denominator: d }];
   }
-  return { message, visuals, cues };
+  return {
+    message,
+    visuals,
+    cues,
+    actions: canvasActions,
+  };
 }

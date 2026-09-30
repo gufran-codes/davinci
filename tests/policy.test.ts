@@ -322,7 +322,9 @@ test("planner rotates to the stalest practiced subject and honors explicit choic
     ],
   };
   assert.equal(
-    conceptById[planLesson(child, l).targetConcept].subject,
+    conceptById[
+      planLesson({ ...child, subjects: ["Math", "Science"] }, l).targetConcept
+    ].subject,
     "Science",
   );
   assert.equal(

@@ -97,7 +97,9 @@ export interface HintEvent {
   studentSucceededAfterHint?: boolean;
 }
 export interface TeachingMemory {
+  intelligence?: import("./session-intelligence").SessionIntelligence;
   recentReasoning: string[];
+  recentTutorQuestions: string[];
   attempts: TeachingAttempt[];
   hintHistory: HintEvent[];
   genuineAttempts: Record<string, number>;
@@ -161,6 +163,7 @@ export interface ConversationPresentation {
   text: string;
   spokenText?: string;
   cues: CanvasCue[];
+  canvasActions?: import("./whiteboard").CanvasAction[];
   intent: ConversationIntent;
   canAnswer: boolean;
   listeningPrompt: string;

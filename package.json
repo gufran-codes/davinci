@@ -14,6 +14,7 @@
     "format:check": "prettier --check .",
     "db:seed": "tsx scripts/seed.ts",
     "curriculum": "tsx scripts/curriculum.ts",
+    "curriculum:import": "tsx scripts/curriculum-import.ts",
     "voice:dev": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx agents/primer.ts dev",
     "voice:start": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx agents/primer.ts start",
     "voice:download": "livekit-agents download-files"

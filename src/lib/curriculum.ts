@@ -428,8 +428,8 @@ export const concepts: Concept[] = entries.map(
     domain,
     topic,
     description,
-    gradeBand: [grade, Math.min(6, grade + 1)],
-    gradeRange: [grade, Math.min(6, grade + 1)],
+    gradeBand: [grade, grade],
+    gradeRange: [grade, grade],
     prerequisites,
     learningObjectives: [description],
     misconceptionIds: misconceptions
@@ -482,6 +482,9 @@ export function getQuestion(id: string, seed = 0, transfer = false): Question {
         ? "numeric"
         : "short_text",
     "whiteboard",
+    ...(q.visuals.some((visual) => visual.type === "manipulative")
+      ? (["manipulative"] as const)
+      : []),
   ];
   q.purpose = transfer ? "transfer" : seed === 0 ? "diagnosis" : "practice";
   q.qualityStatus ??= contentById[id] ? "draft" : "authored";

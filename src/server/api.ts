@@ -4,8 +4,8 @@ import {
   saveControls,
   learningControlsSchema,
 } from "./learning-controls";
-import { conversationTurn } from "./understanding";
-import { deliveredSpeech, greeting } from "./conversation";
+import { conversationTurn, conversationalGreeting } from "./understanding";
+import { deliveredSpeech } from "./conversation";
 import { connectVoice, verifyWorkerToken } from "./voice/access";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
@@ -22,6 +22,7 @@ import {
 import {
   childrenFor,
   createChild,
+  updateChildPreferences,
   event,
   HttpError,
   learnerFor,
@@ -179,7 +180,7 @@ export async function handle(req: NextRequest, path: string[]) {
       }
       const session =
         input.action === "greet"
-          ? greeting(child, access.sessionId)
+          ? await conversationalGreeting(child, access.sessionId)
           : await conversationTurn(child, access.sessionId, {
               requestId: input.requestId ?? "",
               version: input.version ?? -1,
@@ -299,6 +300,10 @@ export async function handle(req: NextRequest, path: string[]) {
     }
     if (path[0] === "children" && path[1]) {
       const child = ownedChild(user.id, path[1]);
+      if (path.length === 2 && method === "PATCH")
+        return NextResponse.json({
+          child: updateChildPreferences(user.id, child.id, await body(req)),
+        });
       if (path[2] === "controls") {
         if (method === "GET")
           return NextResponse.json({ controls: controlsFor(child.id) });
@@ -353,7 +358,7 @@ export async function handle(req: NextRequest, path: string[]) {
         const session = startSession(
           child,
           data.kind,
-          data.kind === "homework" ? data.conceptId : undefined,
+          data.conceptId,
           data.homeworkId,
           data.kind === "homework" ? undefined : data.subject,
         );

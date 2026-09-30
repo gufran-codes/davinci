@@ -36,6 +36,15 @@ test("grade navigation, parent answer controls, reveal teaching and persistent s
   expect(response.ok()).toBeTruthy();
   await page.goto(`/learn/${child.id}/session`);
   await expect(
+    page.getByRole("heading", { name: "Which choice fits best?" }),
+  ).toBeVisible();
+  const option = page.getByRole("radio", { name: /B 2\/4/ });
+  await option.click();
+  await expect(option).toHaveAttribute("aria-checked", "true");
+  await expect(
+    page.getByRole("button", { name: "Choose this answer" }),
+  ).toBeEnabled();
+  await expect(
     page.getByRole("button", { name: "Show correct answer" }),
   ).toBeEnabled();
   await page.getByRole("button", { name: "Show correct answer" }).click();

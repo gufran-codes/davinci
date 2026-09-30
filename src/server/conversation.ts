@@ -1,3 +1,8 @@
+import {
+  sessionIntelligence,
+  startDiagnosticProbe,
+  finishDiagnosticProbe,
+} from "../lib/teaching/session-intelligence";
 import { randomUUID } from "node:crypto";
 import { conceptById, getQuestion, gradeQuestion } from "../lib/curriculum";
 import {
@@ -55,6 +60,53 @@ function focusingQuestion(s: LearningSession) {
   if (s.question.subject === "Science")
     return "What did you observe, and what changed?";
   return "Which piece of evidence helps you decide?";
+}
+function freshFocusingQuestion(s: LearningSession) {
+  const memory = memoryFor(s);
+  const bySubject: Record<string, string[]> = {
+    Math: [
+      focusingQuestion(s),
+      "Which quantity do you know, and which one are you trying to find?",
+      "What operation or relationship fits what the question is asking?",
+    ],
+    English: [
+      "Which exact words or details support your idea?",
+      "What in the text made you think that?",
+      "How would you explain your idea using one detail from the text?",
+    ],
+    Science: [
+      "What did you observe, and what changed?",
+      "Which evidence supports your explanation?",
+      "What would you predict from the evidence in this question?",
+    ],
+    "Social Studies": [
+      "Which fact, label, or event helps you decide?",
+      "What evidence in the source supports your idea?",
+      "How does the place, time, or point of view affect your answer?",
+    ],
+  };
+  const candidates = bySubject[s.question.subject] ?? [focusingQuestion(s)];
+  return (
+    candidates.find(
+      (candidate) =>
+        !memory.recentTutorQuestions.some(
+          (recent) => similarity(recent, candidate) > 0.72,
+        ),
+    ) ?? candidates[memory.responseOrdinal % candidates.length]
+  );
+}
+function questionsIn(text: string) {
+  return (text.match(/[^.!?]*\?/g) ?? [])
+    .map((question) => question.trim())
+    .filter(Boolean);
+}
+function choiceDirection(s: LearningSession) {
+  const choices = [
+    "Take a careful look at the choices before you decide.",
+    "Compare the choices, then pick the one that best fits your reasoning.",
+    "The choices are in your answer space. Check each one against the question.",
+  ];
+  return choices[memoryFor(s).responseOrdinal % choices.length];
 }
 function similarity(a: string, b: string) {
   const tokens = (value: string) =>
@@ -119,13 +171,37 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
     similarity(previous, speech) > 0.82
   )
     checks.push("repeated_tutor_turn");
+  const questions = questionsIn(speech);
+  if (
+    p.intent !== "repeat" &&
+    questions.some((question) =>
+      memoryFor(s).recentTutorQuestions.some(
+        (recent) => similarity(recent, question) > 0.78,
+      ),
+    )
+  )
+    checks.push("repeated_tutor_question");
+  if (
+    s.question.subject !== "English" &&
+    questions.some((question) => /\b(?:story|text|passage)\b/i.test(question))
+  )
+    checks.push("subject_irrelevant_question");
   if (checks.length) {
-    speech = `Let’s pause on one idea. ${focusingQuestion(s)}`;
+    speech = `Let’s pause on one idea. ${freshFocusingQuestion(s)}`;
     revised = true;
   } else if (p.canAnswer && !speech.includes("?")) {
-    speech = `${speech} ${focusingQuestion(s)}`;
+    speech = `${speech} ${freshFocusingQuestion(s)}`;
     revised = true;
   }
+  const finalQuestions = questionsIn(speech);
+  if (finalQuestions.length) {
+    const memory = memoryFor(s);
+    memory.recentTutorQuestions = [
+      ...memory.recentTutorQuestions,
+      ...finalQuestions,
+    ].slice(-12);
+  }
+  if (revised) p.text = speech;
   p.spokenText = speech;
   const spokenWords = wordCount(speech);
   p.cues = p.cues.map((cue) => ({
@@ -167,10 +243,20 @@ export function replaceTutorSpeech(
     // The deterministic policy already checked repetition against the prior
     // turn. Re-check every other invariant after optional language rendering.
     const prior = s.conversation;
+    const memory = memoryFor(s);
+    // The deterministic draft was verified before the optional LLM renderer.
+    // Remove only that draft's newly recorded questions before verifying the
+    // final wording, otherwise preserving the required question is falsely
+    // classified as repetition and replaced with a generic fallback.
+    for (const question of questionsIn(prior.spokenText ?? prior.text)) {
+      const index = memory.recentTutorQuestions.findLastIndex(
+        (recent) => similarity(recent, question) > 0.98,
+      );
+      if (index >= 0) memory.recentTutorQuestions.splice(index, 1);
+    }
     s.conversation = undefined;
     verifyTutorTurn(s, p);
     s.conversation = p;
-    const memory = memoryFor(s);
     memory.wordShare.tutor += wordCount(p.spokenText ?? p.text) - previousWords;
     saveSession(s);
     const row = one<{ data: string }>(
@@ -239,6 +325,11 @@ function presentation(
   let spokenText = text;
   const offset = prefix ? prefix.split(/\s+/).length : 0;
   let cues = t.cues.map((c) => ({ ...c, atWord: c.atWord + offset }));
+  let canvasActions = t.actions.map((action) => ({
+    ...action,
+    atWord: action.atWord + offset,
+  }));
+  const introduced = m.introducedPrompts.includes(s.question.prompt);
   if (s.state === "SESSION_REVIEW") {
     text =
       "How did that feel: a little clearer, ready for more, or still tricky?";
@@ -268,17 +359,21 @@ function presentation(
         label: "A little clearer, ready for more, or still tricky?",
       },
     ];
+    canvasActions = [];
   } else if (s.state === "COMPLETE") {
     text =
       s.kind === "homework"
         ? "You’ve practiced the idea. Now try the original homework problem yourself."
         : "That’s enough for today. Your next lesson will build on what we learned.";
     cues = [];
+    canvasActions = [];
   } else if (m.checkpoint) {
     if (!text.trim().endsWith("?")) text += ` ${m.checkpoint.prompt}`;
-  } else text += ` ${s.question.prompt}`;
+  } else
+    text += ` ${
+      s.question.choices?.length && !introduced ? `${choiceDirection(s)} ` : ""
+    }${s.question.prompt}`;
   if (!["SESSION_REVIEW", "COMPLETE"].includes(s.state)) {
-    const introduced = m.introducedPrompts.includes(s.question.prompt);
     if (m.checkpoint) spokenText = text;
     else if (!introduced) spokenText = text;
     else if (t.message.trim().endsWith("?"))
@@ -304,6 +399,7 @@ function presentation(
     text,
     spokenText,
     cues,
+    canvasActions,
     intent,
     canAnswer: !m.paused && s.state !== "COMPLETE",
     listeningPrompt: m.paused
@@ -332,6 +428,21 @@ function saveTurn(
 ) {
   s.conversation = p;
   const memory = memoryFor(s);
+  const brain = sessionIntelligence(s)!;
+  const explanation = (p.spokenText ?? p.text).slice(0, 600);
+  if (
+    !brain.explanations.some(
+      (e) => e.questionId === s.question.id && e.text === explanation,
+    )
+  )
+    brain.explanations = [
+      ...brain.explanations,
+      { questionId: s.question.id, strategy: p.strategy, text: explanation },
+    ].slice(-12);
+  brain.canvas = {
+    labels: p.cues.map((c) => c.label).slice(-8),
+    actions: (p.canvasActions ?? []).map((a) => a.type).slice(-12),
+  };
   memory.lastTurnId = p.turnId;
   memory.wordShare.tutor += wordCount(p.spokenText ?? p.text);
   saveSession(s);
@@ -497,8 +608,9 @@ export function converse(
     else if (turn.intent === "reveal") {
       const access = answerAccess(s);
       if (!access.allowed)
-        direct =
-          access.policy === "disabled"
+        direct = access.masteryCheck
+          ? "This is a check of what you can do yourself. You can ask for a hint, and we’ll count it as practice with help."
+          : access.policy === "disabled"
             ? "Let’s work it out together. I can give a hint or show a different example. Which would help?"
             : `Let’s try ${access.remaining} more ${access.remaining === 1 ? "time" : "times"} before we look at the solution. Would you like a hint?`;
       else {
@@ -744,8 +856,11 @@ export function converse(
             action: "answer",
             version: s.version,
             answer,
+            reasoning: turn.reasoning,
           });
           const state = memoryFor(s);
+          const probed = finishDiagnosticProbe(s, correct);
+          if (probed) saveSession(s);
           if (correct) {
             if (state.returnStack.length) {
               const frame = state.returnStack[state.returnStack.length - 1];
@@ -774,11 +889,16 @@ export function converse(
               ...s.question,
               id: `${s.question.id.split(":").slice(0, 2).join(":")}:retry${++state.responseOrdinal}`,
             };
-            const change = applySupport(s, updated, child, "another", false);
+            const change = probed
+              ? { next: s.decision.strategy, reason: s.decision.reason }
+              : startDiagnosticProbe(s)
+                ? { next: s.decision.strategy, reason: s.decision.reason }
+                : applySupport(s, updated, child, "another", false);
             saveLearner(child.id, updated);
             event(s, "strategy_changed", change);
-            prefix =
-              "That answer doesn’t fit yet. Let’s try a different approach.";
+            prefix = state.intelligence?.diagnostic
+              ? "Let’s check one building block before choosing how to help."
+              : "That answer doesn’t fit yet. Let’s try a different approach.";
           }
         }
       }
@@ -829,6 +949,7 @@ export function converse(
           label: "Answer and why",
         },
       ];
+      p.canvasActions = [];
       p.canAnswer = false;
       p.verification = {
         passed: true,

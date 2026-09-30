@@ -14,10 +14,13 @@ const { createChild, saveSession, learnerFor, sessionById } =
 const { startSession } = await import("../src/server/orchestrator");
 const { converse, greeting, deliveredSpeech, conversationHistory } =
   await import("../src/server/conversation");
-const { conversationTurn } = await import("../src/server/understanding");
+const { conversationTurn, conversationalGreeting } =
+  await import("../src/server/understanding");
+const { tutorSpeechProfile } = await import("../src/lib/teaching/speech");
 const { seedChildren } = await import("../src/server/demo");
 const { getQuestion, gradeQuestion } = await import("../src/lib/curriculum");
 const { chooseDecision } = await import("../src/lib/learning");
+const { memoryFor } = await import("../src/lib/teaching/adaptive");
 const { understandLocally, spokenMath } =
   await import("../src/lib/conversation/intent");
 const { all, one } = await import("../src/server/db");
@@ -88,6 +91,56 @@ test("children’s normal requests and spoken quantities are understood locally"
   );
 });
 
+test("spoken language exposes the selected teaching strategy without overriding it", async () => {
+  const child = createChild(user.id, {
+    nickname: "Voice",
+    age: 9,
+    grade: 4,
+    goal: "Build confidence",
+    subjects: ["Math"],
+  });
+  const started = startSession(child, "lesson", "equivalent_fractions");
+  started.decision.strategy = "visual_fraction_model";
+  started.decision.strategyId = "visual_fraction_model";
+  saveSession(started);
+  let received:
+    | Parameters<
+        import("../src/server/understanding").ConversationSpeaker["render"]
+      >[0]
+    | undefined;
+  const rendered = await conversationalGreeting(child, started.id, {
+    async render(input) {
+      received = input;
+      return input.draft;
+    },
+  });
+  assert.ok(received);
+  assert.equal(received.state.decision?.strategyId, rendered.decision.strategy);
+  assert.match(received.speechProfile.strategyDirection, /visual|spatial/i);
+  assert.equal(rendered.conversation?.verification?.passed, true);
+  assert.doesNotMatch(
+    rendered.conversation?.verification?.checks.join(" ") ?? "",
+    /repeated_tutor_question/,
+  );
+
+  const visual = tutorSpeechProfile({
+    strategy: "visual_fraction_model",
+    subject: "Math",
+    grade: 4,
+    intent: "show",
+    cognitiveLoad: "guided",
+  });
+  const socratic = tutorSpeechProfile({
+    strategy: "guided_questioning",
+    subject: "Math",
+    grade: 4,
+    intent: "why",
+    cognitiveLoad: "focusing",
+  });
+  assert.notEqual(visual.strategyDirection, socratic.strategyDirection);
+  assert.notEqual(visual.turnShape, socratic.turnShape);
+});
+
 test("review can return to teaching with a different visible approach", () => {
   const f = setup();
   let s = f.say("Finish for today");
@@ -109,6 +162,39 @@ test("natural rapport and learner feedback receive contextual educator responses
   s = f.say("You are stuck in the same loop.");
   assert.notEqual(s.decision.strategy, previous);
   assert.match(s.conversation!.text, /repeating myself/);
+});
+
+test("subject-aware guard replaces the stale story fallback and remembers recent tutor questions", () => {
+  const child = createChild(user.id, {
+    nickname: "Scientist",
+    age: 9,
+    grade: 4,
+    goal: "Understand science",
+    subjects: ["Science"],
+  });
+  const s = startSession(child, "lesson", "g4_science_matter");
+  s.state = "TEACH";
+  s.question = getQuestion("g4_science_matter", 0);
+  s.assistance = 1;
+  s.decision.strategy = "story_context";
+  s.decision.strategyId = "story_context";
+  const memory = memoryFor(s);
+  memory.checkpoint = {
+    questionId: s.question.id,
+    strategy: "story_context",
+    prompt: "What part of that story matches the question?",
+  };
+  saveSession(s);
+  const guarded = greeting(child, s.id);
+  assert.doesNotMatch(
+    guarded.conversation!.text,
+    /part of (?:that|the) story/i,
+  );
+  assert.match(
+    guarded.conversation!.spokenText!,
+    /observe|observation|evidence|predict/i,
+  );
+  assert.ok(memoryFor(guarded).recentTutorQuestions.length > 0);
 });
 
 test("social turns feel conversational without being graded as attempts", () => {

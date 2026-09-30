@@ -19,8 +19,14 @@ const { saveControls, answerAccess } =
 const { getQuestion, conceptById } = await import("../src/lib/curriculum");
 const { understandLocally } = await import("../src/lib/conversation/intent");
 const { saveBoard, boardFor } = await import("../src/server/whiteboard");
-const { boardAnswer, fractionSequence, whiteboardActionSchema } =
-  await import("../src/lib/teaching/whiteboard");
+const {
+  boardAnswer,
+  canvasActionSchema,
+  fractionSequence,
+  multiplicationSequence,
+  numberLineSequence,
+  whiteboardActionSchema,
+} = await import("../src/lib/teaching/whiteboard");
 const { buildTeachingState } = await import("../src/server/provider");
 const { planLesson, emptyLearner, updateMisconception } =
   await import("../src/lib/learning");
@@ -63,7 +69,7 @@ test("parent policies enforce genuine per-question attempts, reveal gives no mas
   f.say("show me the answer");
   assert.equal(f.s.teaching?.revealedQuestions.length, 0);
   for (let i = 0; i < 3; i++) {
-    f.say("1/4");
+    f.say("999/1000");
     assert.equal(answerAccess(f.s).attempts, i + 1);
   }
   assert.equal(answerAccess(f.s).allowed, true);
@@ -172,6 +178,41 @@ test("fraction animation is a validated sequence preserving quantity", () => {
   assert.deepEqual(whiteboardActionSchema.array().parse(actions), actions);
   assert.equal(actions[0].atWord, 0);
   assert.ok(actions[1].atWord > actions[0].atWord);
+});
+
+test("typed math actions stage number-line jumps and multiplication without leaking early answers", () => {
+  const jumps = numberLineSequence(4, 3);
+  assert.equal(jumps[0].type, "showNumberLine");
+  assert.deepEqual(jumps[1], {
+    type: "animateNumberLineJump",
+    id: "number-line-jump",
+    owner: "tutor",
+    from: 4,
+    to: 7,
+    label: "+3",
+    atWord: 7,
+  });
+  const askFirst = multiplicationSequence(3, 4);
+  assert.equal(
+    askFirst.some((action) => action.type === "animateEquationStep"),
+    false,
+  );
+  const workedParallel = multiplicationSequence(3, 4, true);
+  assert.equal(workedParallel.at(-1)?.type, "animateEquationStep");
+  assert.deepEqual(
+    canvasActionSchema.array().parse(workedParallel),
+    workedParallel,
+  );
+  assert.equal(
+    canvasActionSchema.safeParse({
+      type: "showEquation",
+      id: "unsafe",
+      owner: "student",
+      equation: "alert(1)",
+      atWord: 0,
+    }).success,
+    false,
+  );
 });
 
 test("grade-specific arithmetic variants have valid keys and diagnostic options at every grade", () => {

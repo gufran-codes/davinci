@@ -1,10 +1,12 @@
+import { observeAssessment } from "../lib/teaching/session-intelligence";
+import { assessReasoning, rubricFor } from "../lib/teaching/content";
 import {
   applySupport,
   memoryFor,
   returnFromPrerequisite,
 } from "../lib/teaching/adaptive";
 import { randomUUID } from "node:crypto";
-import { conceptById, getQuestion } from "../lib/curriculum";
+import { conceptById, concepts, getQuestion } from "../lib/curriculum";
 import {
   chooseDecision,
   deriveInsight,
@@ -93,8 +95,28 @@ export function startSession(
   return transaction(() => {
     const active = sessionsFor(child.id).find((s) => !s.completedAt);
     if (active) return active;
+    const enabled = child.subjects?.length ? child.subjects : ["Math"];
+    const chosenSubject = target ? conceptById[target]?.subject : subject;
+    if (chosenSubject && !enabled.includes(chosenSubject))
+      throw new HttpError(
+        400,
+        "Enable this subject in your child’s learning settings first.",
+      );
+    if (
+      !concepts.some(
+        (c) =>
+          enabled.includes(c.subject) &&
+          (!chosenSubject || c.subject === chosenSubject) &&
+          c.gradeBand[0] <= child.grade &&
+          c.gradeBand[1] >= child.grade,
+      )
+    )
+      throw new HttpError(
+        400,
+        `Grade ${child.grade} lessons are not available yet. Your learning history is saved.`,
+      );
     const learner = learnerFor(child.id),
-      plan = planLesson(child, learner, new Date(), subject);
+      plan = planLesson(child, learner, new Date(), chosenSubject);
     if (kind === "diagnostic")
       plan.targetConcept = diagnosticStart(child.grade, subject);
     if (target) {
@@ -117,6 +139,10 @@ export function startSession(
       id: randomUUID(),
       childId: child.id,
       kind,
+      learningPreferences: {
+        grade: child.grade,
+        subjects: child.subjects ?? ["Math"],
+      },
       state: kind === "diagnostic" ? "DIAGNOSTIC" : "WARMUP",
       step: 0,
       version: 0,
@@ -156,6 +182,7 @@ export type SessionAction = {
     "answer" | "hint" | "another" | "continue" | "reflect" | "note" | "explain";
   version: number;
   answer?: string;
+  reasoning?: string;
   reflection?: string;
   note?: string;
   confidence?: "guessing" | "pretty_sure" | "very_sure";
@@ -168,6 +195,7 @@ export function advanceSession(
   return transaction(() => {
     const s = sessionById(id);
     if (s.childId !== child.id) throw new HttpError(404, "Lesson not found.");
+    if (s.learningPreferences) child = { ...child, ...s.learningPreferences };
     if (input.version !== s.version)
       throw new HttpError(
         409,
@@ -280,6 +308,12 @@ export function advanceSession(
             : undefined;
       const before =
         learner.states[q.conceptId] ?? initialState(child.id, q.conceptId);
+      const reasoning = input.reasoning
+        ? assessReasoning(input.reasoning, rubricFor(q))
+        : undefined;
+      const reasoningQuality =
+        reasoning?.sufficient && !reasoning.contradicted ? reasoning.score : 0;
+      observeAssessment(s, learner, q, answer, correct, reasoningQuality);
       const after = updateMastery(
         before,
         correct,
@@ -289,7 +323,7 @@ export function advanceSession(
         q.id,
         s.id,
         new Date(),
-        { confidence: memory.signals.confidence },
+        { confidence: memory.signals.confidence, reasoningQuality },
       );
       learner.states[q.conceptId] = after;
       memory.attempts.push({
@@ -439,8 +473,9 @@ export function advanceSession(
           conceptId: q.conceptId,
           sourceQuestionId: independentCheck.sourceQuestionId,
           correct,
+          assisted: s.assistance > 0,
         });
-        if (correct) {
+        if (correct && s.assistance === 0) {
           for (const entry of memory.assistanceLedger)
             if (
               entry.conceptId === q.conceptId &&
@@ -574,6 +609,24 @@ export function advanceSession(
       s.state = "SESSION_REVIEW";
       saveSession(s);
       return s;
+    }
+    const recentTargetEvidence =
+      memory.intelligence?.observations
+        .filter((o) => o.skillId === s.plan.targetConcept)
+        .slice(-2) ?? [];
+    if (
+      s.kind !== "diagnostic" &&
+      s.step < 7 &&
+      recentTargetEvidence.length === 2 &&
+      recentTargetEvidence.every((o) => o.kind === "understood")
+    ) {
+      // Two independently explained successes make more guided practice
+      // unnecessary. Verify transfer before concluding the lesson.
+      s.step = 7;
+      event(s, "session_plan_shortened", {
+        reason:
+          "Two independent successes with rubric-supported reasoning; verify transfer next.",
+      });
     }
     let target = s.plan.targetConcept;
     if (s.kind === "diagnostic") {

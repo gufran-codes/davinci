@@ -11,7 +11,7 @@ import {
   alternativesFor,
   chooseDecision,
   masteryLabel,
-  planLesson,
+  availableLesson,
   strengthsFor,
   weaknessesFor,
 } from "@/lib/learning";
@@ -33,11 +33,11 @@ export default async function Inspector({
     notFound();
   }
   const learner = learnerFor(child.id),
-    plan = planLesson(child, learner),
-    target = conceptById[plan.targetConcept],
-    state = learner.states[plan.targetConcept],
-    decision = chooseDecision(learner, plan.targetConcept),
-    alternatives = alternativesFor(learner, plan.targetConcept),
+    plan = availableLesson(child, learner),
+    target = conceptById[plan?.targetConcept ?? ""],
+    state = learner.states[plan?.targetConcept ?? ""],
+    decision = plan ? chooseDecision(learner, plan.targetConcept) : null,
+    alternatives = plan ? alternativesFor(learner, plan.targetConcept) : [],
     sessions = sessionsFor(child.id),
     events = eventsFor(child.id),
     active = sessions.find((s) => !s.completedAt),
@@ -61,6 +61,16 @@ export default async function Inspector({
         at: e.createdAt,
         ...(e.metadata as Record<string, unknown>),
       }));
+  if (!plan || !decision)
+    return (
+      <main>
+        <h1>Curriculum pending</h1>
+        <p>
+          No lesson is available for this grade and enabled subjects. Existing
+          learner records are preserved.
+        </p>
+      </main>
+    );
   return (
     <main className="legal inspector">
       <h1>Da Vinci personalization debugger</h1>
@@ -94,7 +104,7 @@ export default async function Inspector({
         <dl>
           <dt>Skill</dt>
           <dd>
-            {target?.name} ({plan.targetConcept})
+            {target?.name} ({plan?.targetConcept ?? ""})
           </dd>
           <dt>Subject / domain</dt>
           <dd>

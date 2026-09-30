@@ -1,5 +1,11 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import Link from "next/link";
 import {
   Mic,
@@ -32,6 +38,11 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
     [words, setWords] = useState(Number.MAX_SAFE_INTEGER),
     [showText, setShowText] = useState(false),
     [busy, setBusy] = useState(false),
+    [selectedChoice, setSelectedChoice] = useState({
+      questionId: "",
+      value: "",
+    }),
+    [audioLevel, setAudioLevel] = useState(0),
     [latency, setLatency] = useState<VoiceLatencyMetric[]>([]);
   const current = useRef(initial),
     transport = useRef<VoiceTransport | null>(null),
@@ -142,6 +153,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
       onInterrupt: () => setStatus("listening"),
       onMetric: (metric: VoiceLatencyMetric) =>
         setLatency((current) => [...current.slice(-7), metric]),
+      onAudioLevel: setAudioLevel,
     };
     try {
       const config = await api<{
@@ -176,6 +188,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
     active.current = false;
     transport.current?.disconnect();
     setVoice(false);
+    setAudioLevel(0);
     setWords(Number.MAX_SAFE_INTEGER);
   }
   const p = session.conversation,
@@ -203,17 +216,88 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
           </div>
           <TeachingCanvas
             cues={p?.cues ?? []}
+            actions={p?.canvasActions ?? []}
             words={words}
             onAnswer={(answer) => void send(answer, "canvas")}
           />
+          {session.question.choices &&
+            !complete &&
+            !session.answerAccess.revealed && (
+              <section
+                className="choice-workspace"
+                aria-labelledby="choice-title"
+              >
+                <div className="choice-workspace-heading">
+                  <div>
+                    <span className="eyebrow">YOUR ANSWER SPACE</span>
+                    <h2 id="choice-title">Which choice fits best?</h2>
+                  </div>
+                  <p>
+                    Compare each option with the question before you choose.
+                  </p>
+                </div>
+                <div className="prominent-choices" role="radiogroup">
+                  {session.question.choices.map((choice, index) => {
+                    const selected =
+                      selectedChoice.questionId === session.question.id &&
+                      selectedChoice.value === choice;
+                    return (
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        className={selected ? "selected" : ""}
+                        key={choice}
+                        disabled={busy}
+                        onClick={() =>
+                          setSelectedChoice({
+                            questionId: session.question.id,
+                            value: choice,
+                          })
+                        }
+                      >
+                        <strong>{String.fromCharCode(65 + index)}</strong>
+                        <span>{choice}</span>
+                        <i aria-hidden>{selected ? "✓" : ""}</i>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  className="button choice-submit"
+                  disabled={
+                    busy ||
+                    selectedChoice.questionId !== session.question.id ||
+                    !selectedChoice.value
+                  }
+                  onClick={() => void send(selectedChoice.value, "text")}
+                >
+                  Choose this answer
+                  <ArrowRight size={17} />
+                </button>
+              </section>
+            )}
           <SharedWhiteboard
             sessionId={session.id}
             onAnswer={(answer) => void send(answer, "canvas")}
           />
         </div>
         <aside className="conversation-controls">
-          <div className={`voice-orb ${status}`} aria-hidden>
-            <Leaf size={34} />
+          <div
+            className={`voice-orb ${status}`}
+            style={{ "--audio-level": audioLevel } as CSSProperties}
+            aria-hidden
+          >
+            <div className="orb-core">
+              <Leaf size={31} />
+              <span className="voice-wave">
+                <b />
+                <b />
+                <b />
+                <b />
+                <b />
+              </span>
+            </div>
             <i />
             <i />
             <i />
@@ -304,25 +388,8 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                 onClick={() => setShowText((v) => !v)}
               >
                 <Keyboard size={16} />
-                {showText ? "Hide text controls" : "Type or use answer cards"}
+                {showText ? "Hide text controls" : "Type an answer"}
               </button>
-              {session.question.choices && (
-                <div className="conversation-choices">
-                  {session.question.choices.map((c) => (
-                    <button
-                      key={c}
-                      disabled={busy}
-                      onClick={() => void send(c, "text")}
-                    >
-                      {String.fromCharCode(
-                        65 + session.question.choices!.indexOf(c),
-                      )}
-                      . {c}
-                    </button>
-                  ))}
-                </div>
-              )}
-
               {showText && (
                 <div className="conversation-fallback">
                   <form

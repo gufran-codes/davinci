@@ -163,7 +163,8 @@ export function SignOut() {
 export function ChildForm() {
   const router = useRouter(),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [grade, setGrade] = useState(4);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -196,7 +197,7 @@ export function ChildForm() {
           autoComplete="off"
         />
       </label>
-      <div className="form-row">
+      <div className="form-row grade-first-row">
         <label>
           Age
           <select name="age" defaultValue="9">
@@ -206,8 +207,12 @@ export function ChildForm() {
           </select>
         </label>
         <label>
-          Grade
-          <select name="grade" defaultValue="4">
+          <span className="form-step">1</span> Choose their grade
+          <select
+            name="grade"
+            value={grade}
+            onChange={(event) => setGrade(Number(event.target.value))}
+          >
             {[1, 2, 3, 4, 5].map((n) => (
               <option key={n} value={n}>
                 Grade {n}
@@ -217,7 +222,13 @@ export function ChildForm() {
         </label>
       </div>
       <fieldset className="subject-picker">
-        <legend>Which subjects need the most help?</legend>
+        <legend>
+          <span className="form-step">2</span> Choose Grade {grade} subjects
+        </legend>
+        <p className="small muted subject-picker-help">
+          Da Vinci will stay within this grade for new learning and can revisit
+          earlier foundations when needed.
+        </p>
         {["Math", "English", "Science", "Social Studies"].map((subject) => (
           <label className="check-label" key={subject}>
             <input

@@ -17,7 +17,12 @@ export const rubricSchema = z.object({
 export const skillContentSchema = z.object({
   id: z.string(),
   name: z.string(),
-  grade: z.number().int().min(1).max(5),
+  grade: z.number().int().min(1).max(10),
+  courseId: z.string().nullable().optional(),
+  recommendedGradeMin: z.number().int().min(1).max(10).optional(),
+  recommendedGradeMax: z.number().int().min(1).max(10).optional(),
+  sourceId: z.string().optional(),
+  curriculumVersion: z.string().optional(),
   subject: z.enum(["Math", "English", "Science", "Social Studies"]),
   domain: z.string(),
   topic: z.string(),

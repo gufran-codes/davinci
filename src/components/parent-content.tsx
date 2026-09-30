@@ -1,18 +1,16 @@
+import { LearningEvidence, ParentSkillExplorer } from "./parent-learning";
+import { ChildPreferences } from "./child-preferences";
 import Link from "next/link";
 import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
   Calculator,
-  Check,
-  Clock,
   FlaskConical,
   Globe,
   Lightbulb,
   MoveUpRight,
   Sparkles,
-  Sun,
-  TrendingUp,
 } from "lucide-react";
 import {
   Child,
@@ -26,7 +24,7 @@ import { concepts, conceptById } from "@/lib/curriculum";
 import {
   deriveInsight,
   masteryLabel,
-  planLesson,
+  availableLesson,
   strengthsFor,
   weaknessesFor,
 } from "@/lib/learning";
@@ -52,7 +50,7 @@ export function InsightCard({
         <span className="icon-disc light">
           <Lightbulb size={21} />
         </span>
-        <span>SOMETHING PRIMER HAS LEARNED</span>
+        <span>SOMETHING DA VINCI HAS LEARNED</span>
         <span className="tiny-pill">{insight.confidence}</span>
       </div>
       <h2>{insight.title}</h2>
@@ -86,225 +84,61 @@ export function Dashboard({
   child,
   learner,
   sessions,
-  now,
 }: {
   child: Child;
   learner: Learner;
   sessions: LearningSession[];
   now: number;
 }) {
-  const completed = sessions.filter((s) => s.completedAt),
-    week = completed.filter(
-      (s) => now - Date.parse(s.completedAt!) < 7 * 86400000,
-    ),
-    plan = planLesson(child, learner),
-    secure = Object.values(learner.states).filter(
-      (s) => masteryLabel(s) === "Secure",
-    ).length;
-  const last = completed[0];
+  const plan = availableLesson(child, learner);
+  const active = sessions.find((s) => !s.completedAt);
+  const last = sessions.find((s) => s.completedAt);
   return (
     <>
       <PageHeading
         eyebrow="THE BIG PICTURE"
         title={`${child.nickname}’s learning`}
-        description="A little more understanding. A little more confidence."
-        action={
-          <span className="date-chip">
-            <Sun size={16} />
-            One small step at a time
-          </span>
-        }
+        description="What they know, what needs practice, and how teaching is changing."
       />
-      <div className="overview-grid">
-        <div className="overview-main">
-          <section className="welcome-card">
-            <div>
-              <span className="eyebrow">
-                {child.diagnosticComplete
-                  ? "GROWING AT THEIR OWN PACE"
-                  : "A GOOD PLACE TO BEGIN"}
-              </span>
-              <h2>
-                {child.diagnosticComplete
-                  ? "Every little “I get it”\nis a big thing."
-                  : `Let’s understand where\n${child.nickname} is today.`}
-              </h2>
-              <p>
-                {child.diagnosticComplete
-                  ? `A thoughtful next step is ready for ${child.nickname}. About ten minutes, with room to think.`
-                  : "A few gentle questions help us find the right starting point. No grades. No pressure."}
-              </p>
-              <ButtonLink href={`/learn/${child.id}`}>
-                {child.diagnosticComplete
-                  ? "Open today’s lesson"
-                  : "Start diagnostic"}
-                <ArrowRight size={18} />
-              </ButtonLink>
-            </div>
-            <div className="growth-art" aria-hidden="true">
-              <div className="art-orbit" />
-              <div className="art-stem" />
-              <i className="art-leaf leaf-a" />
-              <i className="art-leaf leaf-b" />
-              <i className="art-leaf leaf-c" />
-              <div className="art-pot" />
-              <span className="art-spark">✦</span>
-            </div>
-          </section>
-          <div className="stats-row">
-            <div>
-              <span className="stat-icon">
-                <BookOpen size={19} />
-              </span>
-              <div>
-                <strong>
-                  {week.length}
-                  <small> sessions</small>
-                </strong>
-                <p>Completed this week</p>
-              </div>
-            </div>
-            <div>
-              <span className="stat-icon peach">
-                <TrendingUp size={19} />
-              </span>
-              <div>
-                <strong>
-                  {secure}
-                  <small> concepts</small>
-                </strong>
-                <p>Looking secure so far</p>
-              </div>
-            </div>
-            <div>
-              <span className="stat-icon lavender">
-                <Clock size={19} />
-              </span>
-              <div>
-                <strong>
-                  ~10<small> min</small>
-                </strong>
-                <p>A little time to learn</p>
-              </div>
-            </div>
-          </div>
-          <InsightCard insight={deriveInsight(child, learner)} child={child} />
-        </div>
-        <aside className="overview-side">
-          <section className="card next-card">
-            <span className="section-kicker">
-              <span className="tiny-dot" /> UP NEXT FOR{" "}
-              {child.nickname.toUpperCase()}
-            </span>
-            <div className="mini-fractions" aria-hidden="true">
-              <div>
-                <i />
-                <i />
-                <i />
-                <i />
-              </div>
-              <div>
-                <i />
-                <i />
-                <i />
-                <i />
-                <i />
-                <i />
-                <i />
-                <i />
-              </div>
-            </div>
-            <h3>
-              {child.diagnosticComplete
+      <section className="card parent-next-step">
+        <div>
+          <span className="eyebrow">
+            {active ? "READY TO CONTINUE" : "NEXT LEARNING STEP"}
+          </span>
+          <h2>
+            {active
+              ? conceptById[active.plan.targetConcept]?.name
+              : plan
                 ? conceptById[plan.targetConcept].name
-                : "A little getting-to-know-you"}
-            </h3>
-            <p className="muted">
-              {child.diagnosticComplete
+                : `Grade ${child.grade} lessons are coming`}
+          </h2>
+          <p>
+            {active
+              ? "Their saved lesson keeps its original starting point. Updated settings apply to the next lesson."
+              : plan
                 ? plan.reason
-                : "We’ll find a comfortable place to start, one question at a time."}
-            </p>
-            <div className="lesson-meta">
-              <Clock size={15} />
-              {child.diagnosticComplete
-                ? "About 10 minutes"
-                : "About 8–12 minutes"}
-              <span>•</span>
-              {child.diagnosticComplete
-                ? (conceptById[plan.targetConcept]?.subject ?? "Math")
-                : "All subjects"}
-            </div>
-            <Link className="next-link" href={`/learn/${child.id}`}>
-              Ready when they are
-              <ArrowRight size={18} />
-            </Link>
-          </section>
-          <section className="card parent-note">
-            <span className="icon-disc peach">
-              <Check size={20} />
-            </span>
-            <h3>You’re doing enough.</h3>
-            <p className="muted">
-              No lesson planning needed. Just a quiet spot, a little time, and
-              space for {child.nickname} to figure things out.
-            </p>
-            <span className="small">We’ll take it from there.</span>
-          </section>
-        </aside>
-      </div>
-      <div className="bottom-grid">
-        <section className="card">
-          <div className="section-title">
-            <h3>What’s taking shape</h3>
-            <TextLink href={`/app/children/${child.id}/learning`}>
-              Learning journey
-            </TextLink>
-          </div>
-          <DomainRows learner={learner} />
-          <p className="card-footnote">
-            Da Vinci’s current estimate. Understanding takes time.
+                : "Past progress is saved. We will add lessons here when the curriculum is ready."}
           </p>
+        </div>
+        <ButtonLink href={`/learn/${child.id}`}>
+          Open learning space <ArrowRight size={18} />
+        </ButtonLink>
+      </section>
+      <LearningEvidence child={child} learner={learner} />
+      <details className="card spaced parent-settings">
+        <summary>Grade {child.grade} · Manage grade and subjects</summary>
+        <ChildPreferences key={child.id} child={child} />
+      </details>
+      {last && (
+        <section className="card spaced">
+          <h2>Last lesson</h2>
+          <p>{last.summary?.workedOn}</p>
+          <p>{last.summary?.improved}</p>
+          <TextLink href={`/app/children/${child.id}/sessions/${last.id}`}>
+            Read the lesson summary
+          </TextLink>
         </section>
-        <section className="card">
-          <div className="section-title">
-            <h3>The last little step</h3>
-
-            <TextLink href={`/app/children/${child.id}/sessions`}>
-              All sessions
-            </TextLink>
-          </div>
-          {last ? (
-            <>
-              <span className="small muted">
-                {new Date(last.completedAt!).toLocaleDateString("en", {
-                  month: "short",
-                  day: "numeric",
-                })}{" "}
-                ·{" "}
-                {last.kind === "diagnostic"
-                  ? "Getting to know you"
-                  : last.kind === "homework"
-                    ? "Schoolwork session"
-                    : `${conceptById[last.plan.targetConcept]?.subject ?? "Math"} session`}
-              </span>
-              <h3 className="last-title">{last.summary?.workedOn}</h3>
-              <p className="muted">{last.summary?.improved}</p>
-              <Link
-                className="text-link"
-                href={`/app/children/${child.id}/sessions/${last.id}`}
-              >
-                See what happened
-                <ArrowRight size={16} />
-              </Link>
-            </>
-          ) : (
-            <Empty title="Their story starts here.">
-              After a first session, you’ll see what clicked and what comes
-              next.
-            </Empty>
-          )}
-        </section>
-      </div>
+      )}
     </>
   );
 }
@@ -367,49 +201,7 @@ export function LearningJourney({
         These are Da Vinci’s current estimates, based on practice. They are not
         grades or a formal assessment.
       </p>
-      {(["Math", "English", "Science", "Social Studies"] as Subject[]).map(
-        (subject) => (
-          <section className="card journey-section" key={subject}>
-            <div className="section-title">
-              <h2>{subject}</h2>
-              <span className="small muted">
-                {concepts.filter((c) => c.subject === subject).length} connected
-                ideas
-              </span>
-            </div>
-            <div className="concept-list">
-              {concepts
-                .filter((c) => c.subject === subject)
-                .map((c) => {
-                  const state = learner.states[c.id],
-                    label = masteryLabel(state);
-                  return (
-                    <div className="concept-row" key={c.id}>
-                      <span
-                        className={`concept-dot ${label === "Secure" ? "secure" : ""}`}
-                      >
-                        {label === "Secure" ? <Check size={15} /> : <span />}
-                      </span>
-                      <div>
-                        <h3>{c.name}</h3>
-                        <p>
-                          {c.prerequisites.length
-                            ? `Builds on ${c.prerequisites.map((p) => conceptById[p].name.toLowerCase()).join(" and ")}`
-                            : "A starting foundation"}
-                          {state?.nextReviewAt &&
-                            ` · Review ${new Date(state.nextReviewAt).toLocaleDateString("en", { month: "short", day: "numeric" })}`}
-                        </p>
-                      </div>
-                      <span className={`status ${label.toLowerCase()}`}>
-                        {label}
-                      </span>
-                    </div>
-                  );
-                })}
-            </div>
-          </section>
-        ),
-      )}
+      <ParentSkillExplorer child={child} learner={learner} />
     </>
   );
 }
@@ -602,10 +394,7 @@ export function SessionHistory({
                 {s.teaching.attempts.map((attempt, i) => (
                   <li key={i}>
                     {strategyNames[attempt.strategyId]} · {attempt.outcome} ·
-                    support level {attempt.assistanceLevel}
-                    {attempt.understandingDelta
-                      ? ` · mastery change ${attempt.understandingDelta.toFixed(2)}`
-                      : ""}
+                    {attempt.assistanceLevel ? "with help" : "without help"}
                   </li>
                 ))}
               </ol>

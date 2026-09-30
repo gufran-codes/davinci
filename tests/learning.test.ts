@@ -236,12 +236,13 @@ test("a successful alternate changes future preference and creates a grounded pa
 });
 test("planner prioritizes overdue retention, and failed recall shortens interval", () => {
   const l = emptyLearner(),
+    gradeThreeChild = { ...child, grade: 3 },
     s = initialState(child.id, "multiplication_by_4");
   s.nextReviewAt = "2020-01-01T00:00:00Z";
   s.masteryScore = 0.8;
   s.reviewStage = 3;
   l.states[s.conceptId] = s;
-  assert.equal(planLesson(child, l).targetConcept, s.conceptId);
+  assert.equal(planLesson(gradeThreeChild, l).targetConcept, s.conceptId);
   const now = new Date("2026-09-16T12:00:00Z");
   const failed = updateMastery(
     s,

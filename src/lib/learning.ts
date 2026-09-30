@@ -84,9 +84,15 @@ export function updateMastery(
       confidence: context.confidence,
     }),
     delta =
-      outcome === "assisted_success" && assistance >= 2
+      (outcome === "assisted_success" && assistance >= 2
         ? teachingPolicy.evidence.heavySupportCorrect
-        : masteryDeltaFor(outcome);
+        : masteryDeltaFor(outcome)) +
+      (correct &&
+      assistance === 0 &&
+      context.confidence !== "low" &&
+      (context.reasoningQuality ?? 0) >= 0.65
+        ? 0.02
+        : 0);
   s.masteryScore = Math.max(0, Math.min(1, s.masteryScore + delta));
   s.masteryConfidence = Math.min(0.95, s.masteryConfidence + 0.07);
   s.lastPracticedAt = now.toISOString();
@@ -128,15 +134,20 @@ export function updateMastery(
       sessionId,
       outcome,
       reason:
-        outcome === "transfer_success"
-          ? "Correct on a transfer problem without assistance."
-          : outcome === "independent_success"
-            ? "Correct without assistance."
-            : outcome === "assisted_success"
-              ? `Correct with assistance level ${assistance}.`
-              : outcome === "guessing"
-                ? "Correct while reporting low confidence; verify independently."
-                : "Incorrect response; mastery estimate reduced.",
+        correct &&
+        assistance === 0 &&
+        context.confidence !== "low" &&
+        (context.reasoningQuality ?? 0) >= 0.65
+          ? "Correct independently with rubric-supported reasoning; stronger evidence (+0.02)."
+          : outcome === "transfer_success"
+            ? "Correct on a transfer problem without assistance."
+            : outcome === "independent_success"
+              ? "Correct without assistance."
+              : outcome === "assisted_success"
+                ? `Correct with assistance level ${assistance}.`
+                : outcome === "guessing"
+                  ? "Correct while reporting low confidence; verify independently."
+                  : "Incorrect response; mastery estimate reduced.",
       reasoningQuality: context.reasoningQuality,
       confidence: context.confidence,
     },
@@ -635,10 +646,14 @@ export function planLesson(
       ),
     ),
   ].filter((s): s is Subject => !!s);
+  const enabled = child.subjects?.length ? child.subjects : ["Math" as Subject];
   const subject =
     subjectParam ??
-    activeSubjects.sort((a, b) => practicedAt(b) - practicedAt(a)).pop() ??
-    "Math";
+    activeSubjects
+      .filter((s) => enabled.includes(s))
+      .sort((a, b) => practicedAt(b) - practicedAt(a))
+      .pop() ??
+    enabled[0];
   const inGrade = (id: string) => {
     const c = conceptById[id];
     return (
@@ -754,4 +769,21 @@ export function deriveInsight(child: Child, learner: Learner): Insight {
     strategy: winner.strategyId,
     attempts: winner.attempts,
   };
+}
+
+export function availableLesson(
+  child: Child,
+  learner: Learner,
+  now = new Date(),
+) {
+  if (
+    !concepts.some(
+      (c) =>
+        (child.subjects ?? ["Math"]).includes(c.subject) &&
+        c.gradeBand[0] <= child.grade &&
+        c.gradeBand[1] >= child.grade,
+    )
+  )
+    return null;
+  return planLesson(child, learner, now);
 }

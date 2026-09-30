@@ -1,3 +1,4 @@
+import { ChildPreferences } from "@/components/child-preferences";
 import { LearningControlsForm } from "@/components/learning-controls";
 import { controlsFor } from "@/server/learning-controls";
 import Link from "next/link";
@@ -62,6 +63,7 @@ export default async function ParentPage({
             <h2>
               {c.nickname} · Grade {c.grade}
             </h2>
+            <ChildPreferences child={c} />
             <LearningControlsForm childId={c.id} initial={controlsFor(c.id)} />
           </div>
         ))}
