@@ -10,7 +10,7 @@ const globalDb = globalThis as unknown as {
   primerSchema?: string;
 };
 export function db() {
-  const schemaVersion = "008_curriculum_guards";
+  const schemaVersion = "009_study_schedule";
   if (globalDb.primerDb && globalDb.primerSchema === schemaVersion)
     return globalDb.primerDb;
   const filename =
@@ -44,6 +44,7 @@ export function db() {
     "006_learning_controls.sql",
     "007_curriculum_architecture.sql",
     "008_curriculum_guards.sql",
+    "009_study_schedule.sql",
   ]) {
     if (applied.has(file)) continue;
     d.exec(readFileSync(path.join(process.cwd(), "migrations", file), "utf8"));

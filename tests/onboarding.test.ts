@@ -15,7 +15,7 @@ const { emptyLearner, initialState, subjectOverview } =
   await import("../src/lib/learning");
 const { conceptById } = await import("../src/lib/curriculum");
 
-test("onboarding validation matches grades 1-5, ages 6-11, and chosen subjects", () => {
+test("onboarding validation matches grades 1-10, ages 6-16, and chosen subjects", () => {
   const good = childSchema.parse({
     nickname: "Maya",
     age: 6,
@@ -28,7 +28,7 @@ test("onboarding validation matches grades 1-5, ages 6-11, and chosen subjects",
     childSchema.parse({
       nickname: "M",
       age: 9,
-      grade: 6,
+      grade: 11,
       goal: "Get ahead",
       subjects: ["Math"],
     }),
@@ -60,6 +60,24 @@ test("onboarding validation matches grades 1-5, ages 6-11, and chosen subjects",
       subjects: ["Math"],
     }),
   );
+});
+
+test("high-school profiles can be created without pretending curriculum is available", () => {
+  const user = register(
+    "High School",
+    "high-school@test.local",
+    "long-password-123",
+  );
+  const input = childSchema.parse({
+    nickname: "Sam",
+    age: 16,
+    grade: 10,
+    goal: "Get ahead",
+    subjects: ["Science"],
+  });
+  const child = createChild(user.id, input);
+  assert.equal(ownedChild(user.id, child.id).grade, 10);
+  assert.throws(() => startSession(child, "lesson"), /curriculum|available/i);
 });
 
 test("child subjects persist with a Math default", () => {

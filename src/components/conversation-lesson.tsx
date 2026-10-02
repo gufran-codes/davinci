@@ -32,6 +32,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
   const [session, setSession] = useState(initial),
     [status, setStatus] = useState<VoiceStatus>("idle"),
     [voice, setVoice] = useState(false),
+    [playbackBlocked, setPlaybackBlocked] = useState(false),
     [typed, setTyped] = useState(""),
     [interim, setInterim] = useState(""),
     [error, setError] = useState(""),
@@ -53,6 +54,8 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
     } | null>(null),
     heard = useRef<SpeechReceipt | undefined>(undefined),
     active = useRef(false),
+    connectionEpoch = useRef(0),
+    connecting = useRef(false),
     sendRef = useRef<
       (text: string, source: "voice" | "text" | "canvas") => void
     >(() => {});
@@ -125,20 +128,53 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
       void send(text, source);
     };
   }, [send]);
-  useEffect(
-    () => () => {
-      active.current = false;
-      transport.current?.disconnect();
-    },
-    [],
-  );
-  async function connect() {
+  const disconnect = useCallback(() => {
+    connectionEpoch.current++;
+    connecting.current = false;
+    active.current = false;
+    transport.current?.disconnect();
+    transport.current = null;
+    setVoice(false);
+    setPlaybackBlocked(false);
+    setAudioLevel(0);
+    setWords(Number.MAX_SAFE_INTEGER);
+    setStatus("idle");
+  }, []);
+  const connect = useCallback(async () => {
+    if (
+      connecting.current ||
+      active.current ||
+      current.current.state === "COMPLETE"
+    )
+      return;
+    const epoch = ++connectionEpoch.current;
+    connecting.current = true;
+    transport.current?.disconnect();
+    transport.current = null;
     setError("");
+    setPlaybackBlocked(false);
     setStatus("connecting");
     const callbacks = {
-      onTranscript: (text: string) => sendRef.current(text, "voice"),
+      onTranscript: (text: string) => {
+        if (epoch === connectionEpoch.current) sendRef.current(text, "voice");
+      },
       onInterim: setInterim,
-      onStatus: setStatus,
+      onStatus: (next: VoiceStatus) => {
+        if (epoch !== connectionEpoch.current) return;
+        if (next === "listening" && current.current.state === "COMPLETE") {
+          // Let the final tutor sentence finish before releasing the microphone.
+          disconnect();
+          return;
+        }
+        setStatus(next);
+        if (next === "unavailable") {
+          active.current = false;
+          setVoice(false);
+        }
+      },
+      onPlaybackBlocked: (blocked: boolean) => {
+        if (epoch === connectionEpoch.current) setPlaybackBlocked(blocked);
+      },
       onBoundary: setWords,
       onReceipt: (receipt: SpeechReceipt) => {
         heard.current = receipt;
@@ -147,6 +183,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
         );
       },
       onError: (message: string) => {
+        if (epoch !== connectionEpoch.current) return;
         setError(message);
         setShowText(true);
       },
@@ -161,16 +198,25 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
         url?: string;
         token?: string;
       }>(`/api/sessions/${current.current.id}/voice`, {});
+      if (epoch !== connectionEpoch.current) return;
       if (config.provider === "livekit") {
         const { LiveKitVoiceTransport } = await import("./voice/livekit");
+        if (epoch !== connectionEpoch.current) return;
         transport.current = new LiveKitVoiceTransport(
           config.url!,
           config.token!,
           callbacks,
-          apply,
+          (next) => {
+            if (epoch === connectionEpoch.current) apply(next);
+          },
         );
       } else transport.current = new BrowserVoiceTransport(callbacks);
-      await transport.current.connect();
+      const instance = transport.current;
+      await instance.connect();
+      if (epoch !== connectionEpoch.current) {
+        instance.disconnect();
+        return;
+      }
       active.current = true;
       setVoice(true);
       if (config.provider === "browser" && current.current.conversation) {
@@ -178,18 +224,37 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
         transport.current.speak(current.current.conversation);
       }
     } catch (e) {
+      if (epoch !== connectionEpoch.current) return;
+      active.current = false;
+      setVoice(false);
       transport.current?.disconnect();
       setError((e as Error).message);
       setStatus("unavailable");
       setShowText(true);
+    } finally {
+      if (epoch === connectionEpoch.current) connecting.current = false;
     }
-  }
-  function disconnect() {
-    active.current = false;
-    transport.current?.disconnect();
-    setVoice(false);
-    setAudioLevel(0);
-    setWords(Number.MAX_SAFE_INTEGER);
+  }, [apply, disconnect]);
+  useEffect(() => {
+    // Deferring one tick makes Strict Mode setup/cleanup safe: only the surviving
+    // mount connects, and stale requests cannot reactivate an abandoned lesson.
+    const start = setTimeout(() => {
+      void connect();
+    }, 0);
+    return () => {
+      clearTimeout(start);
+      disconnect();
+    };
+  }, [connect, disconnect]);
+  async function enableAudio() {
+    setError("");
+    try {
+      await transport.current?.enableAudio?.();
+    } catch {
+      setError(
+        "Sound is still blocked. Check this tab’s sound permission, then try again.",
+      );
+    }
   }
   const p = session.conversation,
     complete = session.state === "COMPLETE";
@@ -221,6 +286,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
             onAnswer={(answer) => void send(answer, "canvas")}
           />
           {session.question.choices &&
+            p?.teachingMove !== "guided_step" &&
             !complete &&
             !session.answerAccess.revealed && (
               <section
@@ -303,17 +369,17 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
             <i />
           </div>
           <span className="voice-status" role="status">
-            {
-              {
-                idle: "Ready when you are",
-                connecting: "Connecting your voice…",
-                listening: "I’m listening",
-                speaking: "Da Vinci is speaking",
-                thinking: "Thinking about your next step…",
-                paused: "Take your time",
-                unavailable: "Let’s use text for now",
-              }[status]
-            }
+            {playbackBlocked
+              ? "Enable sound to hear Da Vinci"
+              : {
+                  idle: "Ready when you are",
+                  connecting: "Connecting your voice…",
+                  listening: "I’m listening",
+                  speaking: "Da Vinci is speaking",
+                  thinking: "Thinking about your next step…",
+                  paused: "Take your time",
+                  unavailable: "Let’s use text for now",
+                }[status]}
           </span>
           <p className="spoken-turn" aria-live={voice ? "off" : "polite"}>
             {p?.text ?? session.question.prompt}
@@ -321,16 +387,26 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
           {interim && <p className="child-transcript">“{interim}”</p>}
           {!complete && (
             <>
-              {!voice ? (
+              {playbackBlocked && (
+                <button
+                  className="button large-button full"
+                  onClick={enableAudio}
+                >
+                  <Volume2 size={19} /> Enable sound
+                </button>
+              )}
+              {!voice && !playbackBlocked ? (
                 <button
                   className="button large-button full"
                   onClick={connect}
                   disabled={status === "connecting"}
                 >
                   <Mic size={19} />
-                  Start talking
+                  {status === "connecting"
+                    ? "Starting your tutor…"
+                    : "Reconnect voice"}
                 </button>
-              ) : (
+              ) : voice ? (
                 <div className="voice-actions">
                   <button
                     className="button secondary"
@@ -347,7 +423,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                     Voice off
                   </button>
                 </div>
-              )}
+              ) : null}
               <p className="voice-guidance">
                 {p?.listeningPrompt ??
                   "Answer naturally, or tell me what feels confusing."}

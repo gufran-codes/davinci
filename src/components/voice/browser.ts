@@ -34,6 +34,8 @@ export class BrowserVoiceTransport implements VoiceTransport {
   private microphone: MediaStream | null = null;
   private audioContext: AudioContext | null = null;
   private meterFrame = 0;
+  private cancelled = false;
+  private lastRequested: ConversationPresentation | null = null;
   constructor(private callbacks: VoiceCallbacks) {}
   async connect() {
     const w = window as unknown as Record<string, unknown>,
@@ -51,7 +53,12 @@ export class BrowserVoiceTransport implements VoiceTransport {
         autoGainControl: true,
       },
     });
+    if (this.cancelled) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
     this.microphone = stream;
+    this.active = true;
     this.startMeter(stream);
     this.recognition = new Ctor();
     this.recognition.continuous = true;
@@ -154,6 +161,7 @@ export class BrowserVoiceTransport implements VoiceTransport {
   }
   speak(p: ConversationPresentation) {
     if (!this.active) return;
+    this.lastRequested = p;
     this.interrupt();
     this.current = p;
     this.heardChars = 0;
@@ -196,12 +204,25 @@ export class BrowserVoiceTransport implements VoiceTransport {
       this.current = null;
       this.callbacks.onStatus(p.paused ? "paused" : "listening");
     };
-    utterance.onerror = () => {
+    utterance.onerror = (event) => {
       if (generation !== this.speechGeneration) return;
       this.interrupt();
-      this.callbacks.onStatus("listening");
+      if (event.error === "not-allowed") {
+        this.callbacks.onPlaybackBlocked?.(true);
+        this.callbacks.onStatus("paused");
+      } else {
+        this.callbacks.onError(
+          "Tutor speech could not play. Try reconnecting voice.",
+        );
+        this.callbacks.onStatus("unavailable");
+      }
     };
     window.speechSynthesis.speak(utterance);
+  }
+  async enableAudio() {
+    this.callbacks.onPlaybackBlocked?.(false);
+    window.speechSynthesis.resume();
+    if (this.lastRequested) this.speak(this.lastRequested);
   }
   interrupt() {
     this.speechGeneration++;
@@ -218,6 +239,7 @@ export class BrowserVoiceTransport implements VoiceTransport {
     if (typeof window !== "undefined") window.speechSynthesis?.cancel();
   }
   disconnect() {
+    this.cancelled = true;
     this.active = false;
     clearTimeout(this.timer);
     clearTimeout(this.restartTimer);

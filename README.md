@@ -189,7 +189,13 @@ npm run test:e2e    # Playwright: signup → diagnostic → lesson → homework 
                     # return; demo personalization at 4 widths; API isolation
 ```
 
-Start realtime voice in a second terminal after the web app is running:
+For the full local experience, start both the web app and voice worker together:
+
+```bash
+npm run dev:all
+```
+
+Or, if the web app is already running, start voice in a second terminal:
 
 ```bash
 npm run voice:download # first run only; downloads the Silero VAD model
@@ -198,6 +204,15 @@ npm run voice:dev
 
 The voice scripts load `.env` and `.env.local`, with `.env.local` taking
 precedence. `VOICE_WORKER_SECRET` remains accepted as a legacy alias.
+
+Entering a lesson automatically connects voice, requests microphone access,
+and speaks the opening teaching turn. Allow microphone access when prompted.
+If the browser requires a gesture before playing audio, tap **Enable sound**;
+this unlocks audio and replays the current tutor turn. **Voice off** stops the
+microphone until you choose **Reconnect voice**. A missing worker or failed
+speech service produces an explicit error instead of a false listening state.
+The local worker must remain running for realtime voice; `npm run dev` alone
+starts only the web app. `PRIMER_SERVER_URL` must match its reachable URL/port.
 
 In development, the lesson page exposes **Teaching decisions** below the voice
 controls. It shows the active goal, teaching move, cognitive load, response

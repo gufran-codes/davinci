@@ -54,8 +54,11 @@ export default async function ParentPage({
             <dd>{user.name}</dd>
             <dt>Email</dt>
             <dd>{user.email}</dd>
-            <dt>Subject</dt>
-            <dd>Grades 1–5 · Math, English, Science, Social Studies</dd>
+            <dt>Learning</dt>
+            <dd>
+              Grades 1–10 profiles · Math, English, Science, Social Studies.
+              Grades 6–10 teaching content is being prepared.
+            </dd>
           </dl>
         </section>
         {children.map((c) => (

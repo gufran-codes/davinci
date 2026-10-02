@@ -38,6 +38,12 @@ import {
   sessionById,
 } from "./repository";
 import { all, one, run, transaction } from "./db";
+import {
+  guidedSteps,
+  guidedActions,
+  requestsGuidedSteps,
+} from "../lib/teaching/guided-steps";
+import { beginGuidedPractice, respondToGuidedStep } from "./guided-teaching";
 export interface ConversationInput {
   requestId: string;
   version: number;
@@ -49,6 +55,10 @@ const wordCount = (text: string) =>
   text.trim().split(/\s+/).filter(Boolean).length;
 function focusingQuestion(s: LearningSession) {
   const m = memoryFor(s);
+  if (m.guidedPractice?.questionId === s.question.id) {
+    const step = guidedSteps(s.question)[m.guidedPractice.stepIndex];
+    if (step) return step.prompt;
+  }
   if (m.checkpoint) return m.checkpoint.prompt;
   const material = materialFor(
     s.question,
@@ -165,8 +175,14 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
   )
     checks.push("answer_leak");
   const previous = s.conversation?.spokenText ?? s.conversation?.text ?? "";
+  const returningFromSteps =
+    p.teachingMove === "return_to_task" ||
+    (s.conversation?.teachingMove === "guided_step" &&
+      !memoryFor(s).guidedPractice);
   if (
     p.intent !== "repeat" &&
+    !memoryFor(s).guidedPractice &&
+    !returningFromSteps &&
     !["SESSION_REVIEW", "COMPLETE"].includes(s.state) &&
     similarity(previous, speech) > 0.82
   )
@@ -174,6 +190,8 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
   const questions = questionsIn(speech);
   if (
     p.intent !== "repeat" &&
+    !memoryFor(s).guidedPractice &&
+    !returningFromSteps &&
     questions.some((question) =>
       memoryFor(s).recentTutorQuestions.some(
         (recent) => similarity(recent, question) > 0.78,
@@ -186,10 +204,41 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
     questions.some((question) => /\b(?:story|text|passage)\b/i.test(question))
   )
     checks.push("subject_irrelevant_question");
+  if (
+    memoryFor(s).guidedPractice &&
+    !["wait", "rapport", "reveal", "define", "confidence"].includes(p.intent) &&
+    questions.at(-1) !== focusingQuestion(s)
+  )
+    checks.push("guided_question_changed");
   if (checks.length) {
-    speech = `Let’s pause on one idea. ${freshFocusingQuestion(s)}`;
+    // A repeated question should not erase a useful explanation or acknowledgement.
+    // Unsafe, overlong, or wholly repeated turns still use the bounded fallback.
+    const questionOnly = checks.every((check) =>
+      [
+        "repeated_tutor_question",
+        "subject_irrelevant_question",
+        "too_many_questions",
+      ].includes(check),
+    );
+    const explanation = questionOnly
+      ? speech
+          .replace(/[^.!?]*\?/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+      : "";
+    const nextQuestion = memoryFor(s).guidedPractice
+      ? focusingQuestion(s)
+      : freshFocusingQuestion(s);
+    speech =
+      explanation && wordCount(`${explanation} ${nextQuestion}`) <= 65
+        ? `${explanation} ${nextQuestion}`
+        : `Let’s pause on one idea. ${nextQuestion}`;
     revised = true;
-  } else if (p.canAnswer && !speech.includes("?")) {
+  } else if (
+    p.canAnswer &&
+    !["rapport", "resume", "repeat", "wait"].includes(p.intent) &&
+    !speech.includes("?")
+  ) {
     speech = `${speech} ${freshFocusingQuestion(s)}`;
     revised = true;
   }
@@ -200,6 +249,16 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
       ...memory.recentTutorQuestions,
       ...finalQuestions,
     ].slice(-12);
+    if (memory.checkpoint?.questionId === s.question.id) {
+      // The student, interpreter, and canvas must all refer to the question
+      // actually emitted after the guard (and optional wording renderer).
+      memory.checkpoint.prompt = finalQuestions[finalQuestions.length - 1];
+      p.cues = p.cues.map((cue) =>
+        cue.action === "question"
+          ? { ...cue, label: memory.checkpoint!.prompt }
+          : cue,
+      );
+    }
   }
   if (revised) p.text = speech;
   p.spokenText = speech;
@@ -502,7 +561,15 @@ export function greeting(child: Child, id: string) {
       s.decision.pedagogicalMove = "show_visual";
       s.decision.scaffoldingLevel = 1;
     }
-    const p = presentation(s, "resume", s.decision.personalization);
+    const p = presentation(
+      s,
+      "resume",
+      "Hi, I’m Da Vinci. Let’s work through this together.",
+    );
+    // Open with a human greeting and one invitation, leaving detailed support
+    // on the canvas. A long explanation here can hit the bounded-speech guard
+    // and inadvertently erase the greeting before the child says anything.
+    p.spokenText = `Hi, I’m Da Vinci. We’ll work on ${conceptById[s.question.conceptId].name.toLowerCase()} together. ${m.checkpoint?.prompt ?? s.question.prompt}`;
     verifyTutorTurn(s, p);
     saveTurn(child, s, `greeting-${s.version}`, "", p, "system");
     return s;
@@ -529,9 +596,22 @@ export function converse(
         "Your lesson changed. Reconnect to your saved place.",
       );
     if (input.heard) deliveredSpeech(child, id, input.heard);
-    const turn = understood ?? understandLocally(input.transcript, s.question),
+    const turn =
+        understood ??
+        understandLocally(
+          input.transcript,
+          s.teaching?.guidedPractice?.questionId === s.question.id
+            ? { ...s.question, choices: undefined }
+            : s.question,
+        ),
       l = learnerFor(child.id),
       m = memoryFor(s);
+    if (
+      m.guidedPractice &&
+      (m.guidedPractice.questionId !== s.question.id ||
+        !guidedSteps(s.question)[m.guidedPractice.stepIndex])
+    )
+      m.guidedPractice = undefined;
     m.lastUtterance = input.transcript;
     if (turn.reasoning || turn.intent === "reasoning")
       m.recentReasoning = [
@@ -567,6 +647,7 @@ export function converse(
     if (turn.intent !== "wait") m.paused = false;
     let direct: string | undefined,
       prefix = "";
+    let returnedFromGuidedSteps = false;
     const asksForSupport = [
       "hint",
       "confused",
@@ -592,10 +673,17 @@ export function converse(
     const checkpointObservation =
       m.checkpoint &&
       !checkpointAnswer &&
+      input.source !== "canvas" &&
       !s.question.choices?.includes(turn.answer ?? "") &&
+      !/^(?:my answer is|the answer is|i choose|i pick)\b/i.test(
+        input.transcript.trim(),
+      ) &&
+      // A fraction offered for a fraction task is a recognizable final attempt;
+      // a lone count can instead be a response about pieces in the model.
       !(
         s.question.subject === "Math" &&
-        /^[\d\s+*/().−-]+$/.test(turn.answer ?? "")
+        s.question.answer.includes("/") &&
+        /^\s*[-+]?\d+\s*\/\s*\d+\s*$/.test(turn.answer ?? "")
       ) &&
       ["answer", "correction", "reasoning", "off_topic"].includes(
         turn.intent,
@@ -622,6 +710,7 @@ export function converse(
           explanation: s.question.explanation,
         };
         m.checkpoint = undefined;
+        m.guidedPractice = undefined;
         s.assistance = 7;
         s.decision.pedagogicalMove = "worked_example";
         s.decision.scaffoldingLevel = 5;
@@ -675,18 +764,67 @@ export function converse(
         m.hintLevel = 0;
         prefix = "Now try a different example without help.";
       }
+    } else if (
+      requestsGuidedSteps(input.transcript) &&
+      guidedSteps(s.question).length &&
+      !s.feedback &&
+      !["SESSION_REVIEW", "COMPLETE"].includes(s.state)
+    ) {
+      if (m.guidedPractice) {
+        direct = guidedSteps(s.question)[m.guidedPractice.stepIndex]?.prompt;
+      } else direct = beginGuidedPractice(s) ?? undefined;
+    } else if (
+      m.guidedPractice &&
+      ["answer", "correction", "reasoning", "off_topic"].includes(turn.intent)
+    ) {
+      const result = respondToGuidedStep(s, turn.answer ?? input.transcript);
+      returnedFromGuidedSteps =
+        !!result && !result.changeStrategy && !m.guidedPractice;
+      if (result?.changeStrategy) {
+        applySupport(s, l, child, "another");
+        saveLearner(child.id, l);
+        prefix = result.text;
+      } else direct = result?.text;
+    } else if (
+      m.guidedPractice &&
+      ["hint", "why", "resume", "repeat"].includes(turn.intent)
+    ) {
+      const step = guidedSteps(s.question)[m.guidedPractice.stepIndex];
+      direct = `${turn.intent === "hint" || turn.intent === "why" ? `${step.explanation} ` : ""}${step.prompt}`;
     } else if (checkpointObservation) {
       const checkpoint = m.checkpoint!;
-      m.checkpoint = undefined;
-      m.signals.supportSuccesses++;
+      const observation = assessReasoning(
+        input.transcript,
+        rubricFor(s.question),
+      );
       event(s, "teaching_checkpoint", {
         strategy: checkpoint.strategy,
         questionId: checkpoint.questionId,
         observation: input.transcript,
+        criteria: observation.matches,
+        contradicted: observation.contradicted,
+        sufficient: observation.sufficient,
+        masteryCredit: 0,
       });
-      direct = `That’s a useful observation. Now connect it to the original question: ${s.question.prompt}`;
+      // An observation is not an assessed solution. Even relevant vocabulary
+      // does not demonstrate independent success or strategy effectiveness.
+      if (observation.contradicted) {
+        applySupport(s, l, child, "another");
+        saveLearner(child.id, l);
+        prefix = "Let’s test that idea with another example.";
+      } else if (observation.matches.length) {
+        m.checkpoint = undefined;
+        direct = `Let’s test that connection on the original question: ${s.question.prompt}`;
+      } else {
+        const material = materialFor(
+          s.question,
+          getQuestion(s.question.conceptId, 91),
+        );
+        direct = `Let’s connect your idea to what we can check. ${material.attention} ${checkpoint.prompt}`;
+      }
     } else if (turn.intent === "finish") {
       m.checkpoint = undefined;
+      m.guidedPractice = undefined;
       if (s.state !== "SESSION_REVIEW") {
         s.state = "SESSION_REVIEW";
         s.version++;
@@ -719,6 +857,7 @@ export function converse(
     } else if (turn.intent === "repeat") {
       direct = s.conversation?.text ?? s.question.prompt;
     } else if (["hint", "confused", "easier", "show"].includes(turn.intent)) {
+      m.guidedPractice = undefined;
       if (s.feedback) s.feedback = null;
       const change = applySupport(
         s,
@@ -742,6 +881,7 @@ export function converse(
               ? "Yes—let’s put it on the canvas."
               : "Let’s try a genuinely different way.";
     } else if (turn.intent === "feedback") {
+      m.guidedPractice = undefined;
       if (s.feedback) s.feedback = null;
       const change = applySupport(s, l, child, "another");
       event(s, "strategy_changed", {
@@ -919,6 +1059,7 @@ export function converse(
       direct = `I’m listening, but I’m not sure which part you want to explore. Tell me your idea, ask about a word, or ask me to show it visually.`;
     s.version++;
     const p = presentation(s, turn.intent, prefix);
+    if (returnedFromGuidedSteps) p.teachingMove = "return_to_task";
     if (direct) {
       p.text = direct;
       p.spokenText = direct;
@@ -928,6 +1069,38 @@ export function converse(
       }));
       p.paused = memoryFor(s).paused;
       p.canAnswer = !p.paused && s.state !== "COMPLETE";
+    }
+    const guided = memoryFor(s).guidedPractice;
+    const guidedStep =
+      guided?.questionId === s.question.id
+        ? guidedSteps(s.question)[guided.stepIndex]
+        : undefined;
+    if (guidedStep) {
+      memoryFor(s).goal.nextMove =
+        `Check the learner’s response to “${guidedStep.prompt}” as a supported substep, without awarding mastery.`;
+      p.teachingMove = "guided_step";
+      p.cognitiveLoad = "guided";
+      p.canvasActions = guidedActions(guidedStep, s.question);
+      // Show only source quantities, not comparison visuals containing the key.
+      const sourceVisuals = s.question.visuals.filter(
+        (v) => v.type === "array" || v.type === "fraction_bar",
+      );
+      p.cues = [
+        {
+          id: "guided-model",
+          atWord: 0,
+          action: "show",
+          visuals: sourceVisuals,
+          label: "One step at a time",
+        },
+        {
+          id: "guided-question",
+          atWord: 0,
+          action: "question",
+          visuals: [],
+          label: guidedStep.prompt,
+        },
+      ];
     }
     if (
       turn.intent === "reveal" &&

@@ -151,6 +151,32 @@ await waitFor(
       : undefined,
   "the tutor to finish speaking",
 );
+// Rejoining an existing room must replay the saved turn; onEnter only runs
+// once per worker job. This is also the playback-unlock recovery path.
+const sessionsBeforeRejoin = sessions.length;
+const speakingBeforeRejoin = statuses.filter(
+  (status) => status === "speaking",
+).length;
+await room.localParticipant?.publishData(
+  new TextEncoder().encode(JSON.stringify({ type: "join" })),
+  { reliable: true },
+);
+await waitFor(
+  () =>
+    sessions.length > sessionsBeforeRejoin &&
+    sessions.at(-1)?.conversation?.turnId === first.turnId
+      ? true
+      : undefined,
+  "the existing worker to restore its saved turn",
+);
+await waitFor(
+  () =>
+    statuses.filter((status) => status === "speaking").length >
+      speakingBeforeRejoin && statuses.at(-1) === "listening"
+      ? true
+      : undefined,
+  "the replayed greeting to finish",
+);
 const audibleFramesBeforeStudent = audibleFrames;
 const speakingTurnsBeforeStudent = statuses.filter(
   (status) => status === "speaking",
@@ -201,6 +227,7 @@ console.log(
     initialTurn: first.turnId,
     responseTurn: next.turnId,
     hintLevel: next.hintLevel,
+    restoredExistingTurn: true,
     audibleFrames,
     responseAudioFrames: audibleFrames - audibleFramesBeforeStudent,
     statuses,

@@ -30,12 +30,14 @@ export interface VoiceCallbacks {
   onInterrupt(): void;
   onMetric(metric: VoiceLatencyMetric): void;
   onAudioLevel?(level: number): void;
+  onPlaybackBlocked?(blocked: boolean): void;
 }
 export interface VoiceTransport {
   connect(): Promise<void>;
   speak(presentation: ConversationPresentation): void;
   interrupt(): void;
   disconnect(): void;
+  enableAudio?(): Promise<void>;
 }
 export const childTurnTiming = {
   silenceMs: 2100,

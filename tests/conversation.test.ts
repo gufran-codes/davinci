@@ -17,6 +17,8 @@ const { converse, greeting, deliveredSpeech, conversationHistory } =
 const { conversationTurn, conversationalGreeting } =
   await import("../src/server/understanding");
 const { tutorSpeechProfile } = await import("../src/lib/teaching/speech");
+const { buildTeachingState } = await import("../src/server/provider");
+const { replaceTutorSpeech } = await import("../src/server/conversation");
 const { seedChildren } = await import("../src/server/demo");
 const { getQuestion, gradeQuestion } = await import("../src/lib/curriculum");
 const { chooseDecision } = await import("../src/lib/learning");
@@ -29,6 +31,38 @@ const user = register(
   `conversation-${randomUUID()}@test.local`,
   "safe-password-123",
 );
+test("opening speech keeps a greeting and does not replay or rewrite a saved turn", async () => {
+  const child = createChild(user.id, {
+    nickname: "Sam",
+    age: 9,
+    grade: 4,
+    goal: "Build confidence",
+    subjects: ["Math"],
+  });
+  const initial = startSession(child, "lesson", "equivalent_fractions");
+  let renders = 0;
+  const speaker = {
+    async render(
+      input: Parameters<
+        import("../src/server/understanding").ConversationSpeaker["render"]
+      >[0],
+    ) {
+      renders++;
+      assert.equal(input.openingTurn, true);
+      return initial.question.prompt;
+    },
+  };
+  const first = await conversationalGreeting(child, initial.id, speaker);
+  assert.match(first.conversation!.spokenText!, /^Hi, I’m Da Vinci\./);
+  assert.equal(first.plan.targetConcept, "equivalent_fractions");
+  const resumed = await conversationalGreeting(child, initial.id, speaker);
+  assert.equal(resumed.conversation!.turnId, first.conversation!.turnId);
+  assert.equal(
+    resumed.conversation!.spokenText,
+    first.conversation!.spokenText,
+  );
+  assert.equal(renders, 1);
+});
 function setup(target = "equivalent_fractions") {
   const child = createChild(user.id, {
     nickname: "Test",
@@ -278,6 +312,140 @@ test("a correct original answer during a teaching checkpoint still earns credit"
   assert.equal(s.teaching?.checkpoint, undefined);
   assert.equal(s.correct, 1);
   assert.equal(s.attempts, 1);
+});
+
+test("an intermediate number or unrelated observation is not graded as a final answer", () => {
+  const f = setup();
+  let s = f.say("Show me another way");
+  const before = JSON.stringify(learnerFor(f.child.id));
+  const successes = s.teaching!.signals.supportSuccesses;
+  const original = s.question.id;
+  const intermediate = s.question.answer === "3" ? "2" : "3";
+  s = f.say(intermediate);
+  assert.equal(s.question.id, original);
+  assert.equal(s.attempts, 0);
+  assert.ok(s.teaching!.checkpoint);
+  s = f.say("My shoes are green");
+  assert.ok(s.teaching!.checkpoint);
+  assert.equal(s.teaching!.signals.supportSuccesses, successes);
+  assert.equal(JSON.stringify(learnerFor(f.child.id)), before);
+  assert.doesNotMatch(s.conversation!.text, /useful observation|that.s right/i);
+});
+
+test("a contradictory visual observation is tested, not rewarded", () => {
+  const f = setup();
+  let s = f.say("Show me another way");
+  const successes = s.teaching!.signals.supportSuccesses;
+  const strategy = s.decision.strategy;
+  s = f.say(
+    "A bigger denominator means bigger fraction because there are more pieces",
+  );
+  assert.equal(s.attempts, 0);
+  assert.equal(s.teaching!.signals.supportSuccesses, successes);
+  assert.notEqual(s.decision.strategy, strategy);
+  assert.doesNotMatch(s.conversation!.text, /useful observation|that.s right/i);
+});
+
+test("compact context identifies the current teaching prompt across reloads", async () => {
+  const f = setup();
+  f.say("Show me another way");
+  const s = f.session;
+  const context = buildTeachingState(s, learnerFor(f.child.id), f.child);
+  assert.deepEqual(context.academicContext!.dialogueFocus, {
+    kind: "observation",
+    prompt: s.teaching!.checkpoint!.prompt,
+  });
+  let asked = "";
+  await conversationTurn(
+    f.child,
+    s.id,
+    {
+      requestId: randomUUID(),
+      version: s.version,
+      transcript: "The shaded regions match because the amount stays equal",
+      source: "text",
+    },
+    {
+      async understand(input) {
+        asked = input.question;
+        assert.equal(input.choices, undefined);
+        return { intent: "reasoning", reasoning: input.transcript };
+      },
+    },
+    {
+      async render(input) {
+        return input.draft;
+      },
+    },
+  );
+  assert.equal(asked, s.teaching!.checkpoint!.prompt);
+});
+
+test("repairing a repeated follow-up keeps the relevant explanation", () => {
+  const f = setup();
+  const s = f.session;
+  const repeated = "Which quantity are you trying to find?";
+  memoryFor(s).recentTutorQuestions.push(repeated);
+  saveSession(s);
+  const result = replaceTutorSpeech(f.child, s.id, {
+    turnId: s.conversation!.turnId,
+    version: s.version,
+    spokenText: `Equivalent fractions name the same amount using different-sized pieces. ${repeated}`,
+  });
+  assert.match(
+    result.conversation!.spokenText!,
+    /Equivalent fractions name the same amount/,
+  );
+  assert.ok(
+    result.conversation!.verification!.checks.includes(
+      "repeated_tutor_question",
+    ),
+  );
+  assert.ok(!result.conversation!.spokenText!.includes(repeated));
+});
+
+test("guarded questions stay synchronized with the persisted checkpoint and canvas", () => {
+  const f = setup();
+  const s = f.say("Show me another way");
+  const repeated = "Which quantity are you trying to find?";
+  memoryFor(s).recentTutorQuestions.push(repeated);
+  saveSession(s);
+  const repaired = replaceTutorSpeech(f.child, s.id, {
+    turnId: s.conversation!.turnId,
+    version: s.version,
+    spokenText: `The bars show shares of equal wholes. ${repeated}`,
+  });
+  const prompt = repaired.teaching!.checkpoint!.prompt;
+  assert.ok(repaired.conversation!.spokenText!.endsWith(prompt));
+  assert.ok(
+    repaired.conversation!.cues.some(
+      (cue) => cue.action === "question" && cue.label === prompt,
+    ),
+  );
+  assert.deepEqual(
+    buildTeachingState(f.session, learnerFor(f.child.id), f.child)
+      .academicContext!.dialogueFocus,
+    {
+      kind: "observation",
+      prompt,
+    },
+  );
+});
+
+test("mentioning a first step does not select the first multiple-choice answer", () => {
+  const q = {
+    ...getQuestion("equivalent_fractions", 0),
+    choices: ["1/2", "1/3"],
+  };
+  assert.equal(understandLocally("What should I do first?", q).intent, "hint");
+  assert.notEqual(
+    understandLocally("Can you explain the second step?", q).intent,
+    "answer",
+  );
+  assert.equal(
+    understandLocally("I choose the second option", q).answer,
+    "1/3",
+  );
 });
 
 test("confusion changes representations, descends, then rebuilds upward", () => {

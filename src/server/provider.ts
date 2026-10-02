@@ -21,6 +21,7 @@ import {
   compactWorkingMemory,
 } from "../lib/teaching/session-intelligence";
 import { tutorSpeechProfile } from "../lib/teaching/speech";
+import { dialogueFocus } from "../lib/conversation/dialogue";
 const Output = z.object({
   message: z.string().max(300),
   pedagogicalIntent: z.string().max(160),
@@ -125,6 +126,7 @@ export function buildTeachingState(
       createdAt: entry.createdAt,
     })),
     academicContext: {
+      dialogueFocus: dialogueFocus(session),
       domain: concept.domain,
       topic: concept.topic,
       skillName: concept.name,
@@ -318,6 +320,7 @@ export async function publicSession(
       process.env.NODE_ENV === "development"
         ? {
             goal: memory.goal,
+            guidedPractice: memory.guidedPractice ?? null,
             workingMemory: sessionIntelligence(s),
             teachingMove: s.conversation?.teachingMove ?? null,
             cognitiveLoad: s.conversation?.cognitiveLoad ?? null,

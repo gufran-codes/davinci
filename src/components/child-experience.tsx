@@ -54,7 +54,13 @@ export function StartLesson({
         disabled={busy}
         onClick={async () => {
           setBusy(true);
+          setError("");
           try {
+            if (resume) {
+              router.push(`/learn/${childId}/session`);
+              router.refresh();
+              return;
+            }
             await api(`/api/children/${childId}/sessions`, {
               kind: diagnostic ? "diagnostic" : "lesson",
               subject,

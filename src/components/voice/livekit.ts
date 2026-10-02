@@ -15,6 +15,7 @@ export class LiveKitVoiceTransport implements VoiceTransport {
   private lastServerTurn = "";
   private intentionalDisconnect = false;
   private agentReady: (() => void) | undefined;
+  private rejectReady: ((error: Error) => void) | undefined;
   private levelTimer: ReturnType<typeof setInterval> | undefined;
   constructor(
     private url: string,
@@ -24,8 +25,13 @@ export class LiveKitVoiceTransport implements VoiceTransport {
   ) {}
   async connect() {
     this.callbacks.onStatus("connecting");
-    const ready = new Promise<void>((resolve) => {
+    const ready = new Promise<void>((resolve, reject) => {
       this.agentReady = resolve;
+      this.rejectReady = reject;
+    });
+    void ready.catch(() => {});
+    this.room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      this.callbacks.onPlaybackBlocked?.(!this.room.canPlaybackAudio);
     });
     this.room.on(RoomEvent.TrackSubscribed, (track) => {
       if (track.kind === Track.Kind.Audio) {
@@ -36,10 +42,14 @@ export class LiveKitVoiceTransport implements VoiceTransport {
         document.body.appendChild(el);
         this.elements.push(el);
         void el.play().catch(() => {
-          this.callbacks.onError(
-            "Your browser paused tutor audio. Press Start talking again to enable sound.",
-          );
+          this.callbacks.onPlaybackBlocked?.(true);
         });
+      }
+    });
+    this.room.on(RoomEvent.TrackUnsubscribed, (track) => {
+      for (const element of track.detach()) {
+        element.remove();
+        this.elements = this.elements.filter((item) => item !== element);
       }
     });
     this.room.on(RoomEvent.DataReceived, (bytes, participant) => {
@@ -50,12 +60,22 @@ export class LiveKitVoiceTransport implements VoiceTransport {
         return;
       try {
         const data = JSON.parse(new TextDecoder().decode(bytes));
+        if (data.type === "error") {
+          this.callbacks.onStatus("unavailable");
+          this.callbacks.onError(
+            "The tutor audio service stopped responding. Reconnect to continue, or type your answer.",
+          );
+          this.rejectReady?.(
+            Error("The tutor audio service is unavailable. Please reconnect."),
+          );
+        }
         if (data.type === "session" && data.session?.conversation) {
           this.current = data.session.conversation;
           this.lastServerTurn = this.current!.turnId;
           this.onSession(data.session);
           this.agentReady?.();
           this.agentReady = undefined;
+          this.rejectReady = undefined;
         }
         if (
           data.type === "status" &&
@@ -72,7 +92,11 @@ export class LiveKitVoiceTransport implements VoiceTransport {
       this.callbacks.onStatus("connecting");
     });
     this.room.on(RoomEvent.Reconnected, () => {
-      this.callbacks.onStatus("listening");
+      this.callbacks.onStatus("connecting");
+      void this.room.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify({ type: "sync" })),
+        { reliable: true },
+      );
     });
     this.room.on(RoomEvent.MediaDevicesError, () => {
       this.callbacks.onStatus("unavailable");
@@ -100,8 +124,24 @@ export class LiveKitVoiceTransport implements VoiceTransport {
       );
     });
     await this.room.connect(this.url, this.token);
-    await this.room.startAudio();
+    if (this.intentionalDisconnect) {
+      await this.room.disconnect();
+      return;
+    }
+    await this.room
+      .startAudio()
+      .catch(() => this.callbacks.onPlaybackBlocked?.(true));
     await this.room.localParticipant.setMicrophoneEnabled(true);
+    if (this.intentionalDisconnect) {
+      await this.room.disconnect();
+      return;
+    }
+    // A newly mounted page may be joining an existing tutor. Its onEnter hook
+    // will not run again; request the saved turn without duplicating a new job's greeting.
+    await this.room.localParticipant.publishData(
+      new TextEncoder().encode(JSON.stringify({ type: "join" })),
+      { reliable: true },
+    );
     this.levelTimer = setInterval(
       () =>
         this.callbacks.onAudioLevel?.(
@@ -118,16 +158,26 @@ export class LiveKitVoiceTransport implements VoiceTransport {
             () =>
               reject(
                 Error(
-                  "The tutor voice worker did not join. Start it with npm run voice:dev, then reconnect.",
+                  "Da Vinci couldn’t connect to voice. Ask a grown-up to check the connection, then try again. You can keep typing.",
                 ),
               ),
-            15_000,
+            30_000,
           );
         }),
       ]);
     } finally {
       clearTimeout(timeout);
     }
+  }
+  async enableAudio() {
+    await this.room.startAudio();
+    await Promise.all(this.elements.map((element) => element.play()));
+    this.callbacks.onPlaybackBlocked?.(false);
+    // Replay the saved turn: the initial greeting may have played while blocked.
+    await this.room.localParticipant.publishData(
+      new TextEncoder().encode(JSON.stringify({ type: "sync" })),
+      { reliable: true },
+    );
   }
   speak(p: ConversationPresentation) {
     this.current = p;
@@ -145,6 +195,9 @@ export class LiveKitVoiceTransport implements VoiceTransport {
   }
   disconnect() {
     this.intentionalDisconnect = true;
+    this.rejectReady?.(Error("Voice connection cancelled."));
+    this.rejectReady = undefined;
+    this.agentReady = undefined;
     this.elements.forEach((e) => e.remove());
     this.elements = [];
     clearInterval(this.levelTimer);

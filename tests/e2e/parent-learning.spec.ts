@@ -11,9 +11,33 @@ test("parent evidence, skill details and isolated grade/subject editing", async 
   await expect(
     page.getByRole("heading", { name: "Growing independence" }),
   ).toBeVisible();
+  await page.screenshot({
+    path: "/tmp/davinci-parent-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "/tmp/davinci-parent-mobile.png",
+    fullPage: true,
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.setViewportSize({ width: 1280, height: 900 });
   const { children } = await (await page.request.get("/api/children")).json();
   const child = children[0],
     sibling = children[1];
+  await page.goto(`/app/children/${child.id}/insights`);
+  await expect(
+    page.getByRole("heading", { name: `Learning to teach ${child.nickname}.` }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "/tmp/davinci-parent-insights.png",
+    fullPage: true,
+  });
+  await page.goto("/app");
   await page.getByRole("link", { name: "Explore subjects and skills" }).click();
   const fractions = page
     .locator("details.skill-domain")

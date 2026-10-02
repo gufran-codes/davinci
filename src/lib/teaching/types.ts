@@ -117,6 +117,7 @@ export interface TeachingMemory {
   assessmentQuestionId?: string;
   reasoningAssessed?: string[];
   checkpoint?: TeachingCheckpoint;
+  guidedPractice?: import("./guided-steps").GuidedPractice;
   assistanceLedger: AssistanceLedgerEntry[];
   pendingIndependentCheck?: IndependentCheck;
   activeIndependentCheck?: IndependentCheck;

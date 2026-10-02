@@ -1,3 +1,4 @@
+import report from "./parent-progress.module.css";
 import { LearningEvidence, ParentSkillExplorer } from "./parent-learning";
 import { ChildPreferences } from "./child-preferences";
 import Link from "next/link";
@@ -94,16 +95,29 @@ export function Dashboard({
   const active = sessions.find((s) => !s.completedAt);
   const last = sessions.find((s) => s.completedAt);
   return (
-    <>
-      <PageHeading
-        eyebrow="THE BIG PICTURE"
-        title={`${child.nickname}’s learning`}
-        description="What they know, what needs practice, and how teaching is changing."
-      />
-      <section className="card parent-next-step">
+    <div className={report.report}>
+      <header className={report.reportHeader}>
         <div>
-          <span className="eyebrow">
-            {active ? "READY TO CONTINUE" : "NEXT LEARNING STEP"}
+          <span className={report.eyebrow}>YOUR CHILD’S LEARNING</span>
+          <h1>{child.nickname}’s learning</h1>
+          <p>
+            Grade {child.grade} <span>·</span> A closer look at what’s becoming
+            clear.
+          </p>
+        </div>
+        <Link
+          className={report.profileLink}
+          href={`/app/children/${child.id}/learning`}
+        >
+          <span>{child.nickname.slice(0, 1)}</span>Learning map{" "}
+          <ArrowUpRight size={16} />
+        </Link>
+      </header>
+      <LearningEvidence child={child} learner={learner} />
+      <section className={report.lessonStrip}>
+        <div>
+          <span className={report.eyebrow}>
+            {active ? "CONTINUE THE CONVERSATION" : "THE NEXT LESSON"}
           </span>
           <h2>
             {active
@@ -114,34 +128,36 @@ export function Dashboard({
           </h2>
           <p>
             {active
-              ? "Their saved lesson keeps its original starting point. Updated settings apply to the next lesson."
+              ? "Pick up from their saved place."
               : plan
                 ? plan.reason
-                : "Past progress is saved. We will add lessons here when the curriculum is ready."}
+                : "Their progress is saved while we prepare more lessons."}
           </p>
         </div>
         <ButtonLink href={`/learn/${child.id}`}>
-          Open learning space <ArrowRight size={18} />
+          Open student space <ArrowRight size={17} />
         </ButtonLink>
       </section>
-      <LearningEvidence child={child} learner={learner} />
-      <details className="card spaced parent-settings">
-        <summary>Grade {child.grade} · Manage grade and subjects</summary>
-        <ChildPreferences key={child.id} child={child} />
-      </details>
       {last && (
-        <section className="card spaced">
-          <h2>Last lesson</h2>
-          <p>{last.summary?.workedOn}</p>
-          <p>{last.summary?.improved}</p>
+        <section className={report.lastLesson}>
+          <span className={report.eyebrow}>LAST LESSON</span>
+          <div>
+            <h2>{last.summary?.workedOn ?? "A saved learning session"}</h2>
+            <p>{last.summary?.improved}</p>
+          </div>
           <TextLink href={`/app/children/${child.id}/sessions/${last.id}`}>
             Read the lesson summary
           </TextLink>
         </section>
       )}
-    </>
+      <details className={report.settings}>
+        <summary>Grade {child.grade} · Manage grade and subjects</summary>
+        <ChildPreferences key={child.id} child={child} />
+      </details>
+    </div>
   );
 }
+
 export function DomainRows({ learner }: { learner: Learner }) {
   const subjects: Subject[] = ["Math", "English", "Science", "Social Studies"];
   return (
@@ -274,76 +290,138 @@ export function Insights({
   child: Child;
   learner: Learner;
 }) {
+  const insight = deriveInsight(child, learner);
+  const strengths = strengthsFor(learner).slice(0, 4);
+  const strategies = [...learner.strategies].sort((a, b) =>
+    b.lastUsedAt.localeCompare(a.lastUsedAt),
+  );
+  const patterns = learner.misconceptions.filter(
+    (m) => m.confidence > 0.3 && !m.resolvedAt,
+  );
   return (
-    <>
-      <PageHeading
-        eyebrow="A TUTOR THAT LEARNS, TOO"
-        title={`Learning how to teach ${child.nickname}.`}
-        description="No fixed labels. Just careful observations, and better next steps."
-      />
-      <InsightCard child={child} insight={deriveInsight(child, learner)} full />
-      <KnowledgeSnapshot child={child} learner={learner} />
-      <section className="card spaced">
-        <div className="section-title">
-          <h2>What seems to help</h2>
-          <Lightbulb size={20} />
+    <div className={report.report}>
+      <header className={report.reportHeader}>
+        <div>
+          <span className={report.eyebrow}>HOW DA VINCI ADAPTS</span>
+          <h1>Learning to teach {child.nickname}.</h1>
+          <p>
+            What we’ve noticed, the evidence behind it, and what we’ll try next.
+          </p>
         </div>
-        {learner.strategies.length ? (
-          <div className="strategy-list">
-            {learner.strategies.map((e) => (
-              <div
+      </header>
+      <div className={report.leadGrid}>
+        <article className={report.teachingNote}>
+          <span className={report.eyebrow}>
+            {insight.confidence} · CURRENT OBSERVATION
+          </span>
+          <h2>{insight.title}</h2>
+          <p className={report.leadText}>{insight.observation}</p>
+          <div className={report.nextThought}>
+            <span>How the next lesson changes</span>
+            <p>{insight.adaptation}</p>
+          </div>
+          <p className={report.source}>
+            {insight.attempts
+              ? `Based on ${insight.attempts} practice responses.`
+              : "More practice will help us form a useful observation."}
+          </p>
+        </article>
+        <aside className={report.snapshot}>
+          <span className={report.eyebrow}>STRENGTHS TO BUILD ON</span>
+          {strengths.length ? (
+            strengths.map((strength) => (
+              <div className={report.strength} key={strength.skillId}>
+                <small>{conceptById[strength.skillId]?.subject}</small>
+                <h3>
+                  {conceptById[strength.skillId]?.name ?? strength.skillId}
+                </h3>
+              </div>
+            ))
+          ) : (
+            <p>
+              Independent practice will show which foundations we can build on.
+            </p>
+          )}
+          <Link href={`/app/children/${child.id}/learning`}>
+            See the learning map <ArrowUpRight size={16} />
+          </Link>
+        </aside>
+      </div>
+      <section className={report.subjects}>
+        <div className={report.sectionHeader}>
+          <div>
+            <span className={report.eyebrow}>01 / TEACHING APPROACHES</span>
+            <h2>What seems to help</h2>
+          </div>
+          <p>Recent outcomes, specific to the subject and skill.</p>
+        </div>
+        <div className={report.approaches}>
+          {strategies.length ? (
+            strategies.map((e) => (
+              <article
                 key={`${e.strategyId}-${e.subject ?? ""}-${e.conceptDomain}`}
               >
-                <span className="icon-disc">
-                  <BookOpen size={20} />
-                </span>
                 <div>
+                  <span className={report.eyebrow}>
+                    {e.subject ? `${e.subject} · ` : ""}
+                    {e.conceptDomain}
+                  </span>
                   <h3>{strategyNames[e.strategyId]}</h3>
                   <p>
                     {e.attempts < 3
                       ? "Still gathering evidence."
                       : e.successfulOutcomes / e.attempts >= 0.65
-                        ? `Recently effective in ${e.conceptDomain.toLowerCase()}${e.subject ? ` · ${e.subject}` : ""}.`
-                        : "Mixed results so far. We’ll try other approaches too."}
+                        ? "Recent responses suggest this is worth trying again."
+                        : "Results are mixed. Other approaches are worth exploring."}
                   </p>
-                  <small>
-                    {e.successfulOutcomes} successful outcomes across{" "}
-                    {e.attempts} responses ·{" "}
-                    {e.confidence < 0.5 ? "Early evidence" : "Growing evidence"}
-                  </small>
+                  <details className={report.source}>
+                    <summary>Why we think this</summary>
+                    <p>
+                      {e.successfulOutcomes} successful outcomes across{" "}
+                      {e.attempts} responses.{" "}
+                      {e.confidence < 0.5
+                        ? "Early evidence"
+                        : "Growing evidence"}
+                      ; success with help still needs an independent check.
+                    </p>
+                  </details>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <Empty title="Still learning.">
-            After a few sessions, you’ll start seeing which teaching approaches
-            seem to help.
-          </Empty>
-        )}
+                <div className={report.outcomeCount}>
+                  <strong>
+                    {e.successfulOutcomes}
+                    <span> / {e.attempts}</span>
+                  </strong>
+                  <small>successful responses</small>
+                </div>
+              </article>
+            ))
+          ) : (
+            <p className={report.quiet}>
+              Teaching observations will appear after a few learning sessions.
+            </p>
+          )}
+        </div>
       </section>
-      {learner.misconceptions.some((m) => m.confidence > 0.3) && (
-        <section className="card spaced">
-          <h3>Ideas we’re gently checking</h3>
-          <p className="muted">
-            A mistake can happen for many reasons. Da Vinci uses fresh examples
-            before drawing conclusions.
-          </p>
-          {learner.misconceptions
-            .filter((m) => m.confidence > 0.3)
-            .map((m) => (
-              <p key={m.id}>
-                <span className="status emerging">
-                  {m.confirmed ? "Repeated pattern" : "Possible pattern"}
-                </span>{" "}
-                {m.id.replaceAll("_", " ")} · {m.checks} checks
-              </p>
-            ))}
+      {patterns.length > 0 && (
+        <section className={report.moreNotes}>
+          <span className={report.eyebrow}>02 / IDEAS WE’RE CHECKING</span>
+          <h2>A closer look before drawing conclusions.</h2>
+          {patterns.map((m) => (
+            <article key={m.id}>
+              <p>{m.id.replaceAll("_", " ")}</p>
+              <span>
+                {m.confirmed ? "Repeated pattern" : "Possible pattern"} ·{" "}
+                {m.checks} checks. Fresh examples help distinguish a
+                misconception from a one-off mistake.
+              </span>
+            </article>
+          ))}
         </section>
       )}
-    </>
+    </div>
   );
 }
+
 export function SessionHistory({
   child,
   sessions,

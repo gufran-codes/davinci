@@ -15,6 +15,7 @@ import { ReactNode, useEffect } from "react";
 import { Brand } from "./ui";
 import { SignOut, api } from "./forms";
 import { Child } from "@/lib/types";
+import styles from "./studio.module.css";
 export function ParentShell({
   children,
   profiles,
@@ -43,7 +44,7 @@ export function ParentShell({
     }).catch(() => {});
   }, [path]);
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${styles.parentShell}`}>
       <a className="skip-link" href="#main">
         Skip to content
       </a>

@@ -201,7 +201,7 @@ export function ChildForm() {
         <label>
           Age
           <select name="age" defaultValue="9">
-            {[6, 7, 8, 9, 10, 11].map((n) => (
+            {Array.from({ length: 11 }, (_, i) => i + 6).map((n) => (
               <option key={n}>{n}</option>
             ))}
           </select>
@@ -213,7 +213,7 @@ export function ChildForm() {
             value={grade}
             onChange={(event) => setGrade(Number(event.target.value))}
           >
-            {[1, 2, 3, 4, 5].map((n) => (
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
               <option key={n} value={n}>
                 Grade {n}
               </option>
@@ -221,6 +221,12 @@ export function ChildForm() {
           </select>
         </label>
       </div>
+      {grade > 5 && (
+        <p className="small muted">
+          Grade {grade} profiles are supported. Lessons for this grade are still
+          being prepared; you can save your preferences now.
+        </p>
+      )}
       <fieldset className="subject-picker">
         <legend>
           <span className="form-step">2</span> Choose Grade {grade} subjects

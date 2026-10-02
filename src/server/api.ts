@@ -1,4 +1,5 @@
 import { boardFor, saveBoard } from "./whiteboard";
+import { studyScheduleFor, scheduleStudy, cancelStudy } from "./study-schedule";
 import {
   controlsFor,
   saveControls,
@@ -47,8 +48,8 @@ const credentials = z.object({
 });
 export const childSchema = z.object({
   nickname: z.string().trim().min(1).max(24),
-  age: z.number().int().min(6).max(11),
-  grade: z.number().int().min(1).max(5),
+  age: z.number().int().min(6).max(16),
+  grade: z.number().int().min(1).max(10),
   goal: z.enum([
     "Fill learning gaps",
     "Improve confidence",
@@ -264,6 +265,7 @@ export async function handle(req: NextRequest, path: string[]) {
             ...c,
             learner: learnerFor(c.id),
             learningControls: controlsFor(c.id),
+            studySchedule: studyScheduleFor(user.id, c.id),
             boards: sessionsFor(c.id).map((s) => ({
               sessionId: s.id,
               board: boardFor(s.id),
@@ -300,6 +302,22 @@ export async function handle(req: NextRequest, path: string[]) {
     }
     if (path[0] === "children" && path[1]) {
       const child = ownedChild(user.id, path[1]);
+      if (path[2] === "schedule") {
+        if (method === "GET" && path.length === 3)
+          return NextResponse.json({
+            entries: studyScheduleFor(user.id, child.id),
+          });
+        if (method === "POST" && path.length === 3) {
+          rateLimit(`schedule:${user.id}`, 60);
+          return NextResponse.json({
+            entry: scheduleStudy(user.id, child.id, await body(req)),
+          });
+        }
+        if (method === "DELETE" && path.length === 4) {
+          cancelStudy(user.id, child.id, z.string().uuid().parse(path[3]));
+          return NextResponse.json({ ok: true });
+        }
+      }
       if (path.length === 2 && method === "PATCH")
         return NextResponse.json({
           child: updateChildPreferences(user.id, child.id, await body(req)),

@@ -42,6 +42,7 @@ export default defineAgent({
     let state: PublicSession;
     let receiptQueue: Promise<unknown> = Promise.resolve();
     let latestTranscript = "";
+    let initialSpeechStarted = false;
     const presentations = new Map<
       string,
       NonNullable<PublicSession["conversation"]>
@@ -100,6 +101,7 @@ export default defineAgent({
             allowInterruptions: true,
           },
         );
+        initialSpeechStarted = true;
       }
       async onUserTurnCompleted(
         _context: llm.ChatContext,
@@ -160,6 +162,12 @@ export default defineAgent({
       },
       useTtsAlignedTranscript: true,
       userAwayTimeout: null,
+    });
+    session.on(voice.AgentSessionEventTypes.Error, () => {
+      void ctx.room.localParticipant?.publishData(
+        new TextEncoder().encode(JSON.stringify({ type: "error" })),
+        { reliable: true },
+      );
     });
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (e) => {
       void ctx.room.localParticipant?.publishData(
@@ -222,20 +230,31 @@ export default defineAgent({
       try {
         const message = JSON.parse(new TextDecoder().decode(bytes));
         if (message.type === "interrupt") session.interrupt({ force: true });
-        if (message.type === "sync")
-          void call({ action: "greet" }).then(async (result) => {
-            session.interrupt({ force: true });
-            await publish(result.session);
-            session.say(
-              state.conversation!.spokenText ?? state.conversation!.text,
-              { allowInterruptions: true },
-            );
-          });
+        if (
+          (message.type === "sync" || message.type === "join") &&
+          initialSpeechStarted
+        )
+          void call({ action: "greet" })
+            .then(async (result) => {
+              session.interrupt({ force: true });
+              await publish(result.session);
+              session.say(
+                state.conversation!.spokenText ?? state.conversation!.text,
+                { allowInterruptions: true },
+              );
+            })
+            .catch(() => {
+              void ctx.room.localParticipant?.publishData(
+                new TextEncoder().encode(JSON.stringify({ type: "error" })),
+                { reliable: true },
+              );
+            });
       } catch {
         /* Invalid control messages have no effect. */
       }
     });
     await ctx.connect();
+    await ctx.waitForParticipant();
     await session.start({
       agent: new PrimerAgent(),
       room: ctx.room,

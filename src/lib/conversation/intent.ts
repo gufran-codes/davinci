@@ -87,13 +87,21 @@ export function understandLocally(
   q: Question,
 ): UnderstoodTurn {
   const t = transcript.toLowerCase().replace(/[’]/g, "'").trim();
+  if (
+    /\b(step by step|one step at a time|walk me through|help me with (?:the )?steps)\b/.test(
+      t,
+    )
+  )
+    return { intent: "hint" };
   if (/\b(?:show|tell|give|reveal)\b.*\b(?:answer|solution)\b/.test(t))
     return { intent: "reveal" };
   if (q.choices) {
     const letter = t.match(
       /^(?:(?:i think |i choose |option |answer )*)([a-f])[.!?]?$/,
     )?.[1];
-    const ordinal = t.match(/\b(first|second|third|fourth|fifth|sixth)\b/)?.[1];
+    const ordinal = t.match(
+      /^(?:(?:i choose|i pick|the answer is) )?(?:the )?(first|second|third|fourth|fifth|sixth)(?: (?:one|choice|option))?[.!?]*$/,
+    )?.[1];
     const index = letter
       ? letter.charCodeAt(0) - 97
       : ordinal

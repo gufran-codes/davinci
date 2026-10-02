@@ -31,6 +31,7 @@ export const teachingPolicy = {
     crossSubjectSuccessRate: 0.7,
   },
   remediationFailureCount: 2,
+  guidedPractice: { minimumAssistance: 2, failuresBeforeSwitch: 2 },
   fadeAfterSupportedSuccesses: 2,
 } as const;
 
