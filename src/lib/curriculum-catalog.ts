@@ -41,7 +41,7 @@ export function questionQuality(q: Question) {
   return issues;
 }
 export function curriculumCoverage() {
-  return [1, 2, 3, 4, 5].flatMap((grade) =>
+  return Array.from({ length: 10 }, (_, i) => i + 1).flatMap((grade) =>
     curriculumSubjects.map((subject) => {
       const skills = gradeSkills(grade, subject),
         approved = skills.filter(

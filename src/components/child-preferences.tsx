@@ -64,9 +64,9 @@ export function ChildPreferences({ child }: { child: Child }) {
         ))}
       </fieldset>
       <p className="small muted">
-        Grades 6–10 can be saved now; their lessons are not yet available.
-        Existing lessons can be finished. Earlier learning and prerequisite
-        review are preserved.
+        Grades 6–10 include draft US standards-based practice, with further
+        coverage and educator review still in progress. Existing lessons can be
+        finished. Earlier learning and prerequisite review are preserved.
       </p>
       {error && (
         <p role="alert" className="error">

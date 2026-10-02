@@ -64,6 +64,7 @@ export const canvasActionSchema = z.discriminatedUnion("type", [
     ...tutorAction,
     min: z.number().int().min(-100).max(100),
     max: z.number().int().min(-100).max(100),
+    subdivisions: z.number().int().min(1).max(80).optional(),
     label: z.string().max(100).optional(),
   }),
   z.object({
@@ -204,7 +205,7 @@ export function numberLineSequence(start: number, jump: number) {
       type: "showNumberLine",
       id: "number-line",
       owner: "tutor",
-      min: Math.min(0, start),
+      min: Math.min(0, start, end),
       max: Math.max(end, start, 1),
       label: `Start at ${start}`,
       atWord: 0,
@@ -263,6 +264,15 @@ export function visualActionSequence(
   visuals.forEach((visual, index) => {
     const id = `visual-${index}`;
     switch (visual.type) {
+      case "equation":
+        actions.push({
+          type: "showEquation",
+          id,
+          owner: "tutor",
+          atWord: 0,
+          equation: visual.equation,
+        });
+        break;
       case "fraction_bar":
         actions.push({
           type: "showFractionBars",
@@ -289,7 +299,8 @@ export function visualActionSequence(
             id,
             owner: "tutor",
             min: 0,
-            max: visual.denominator,
+            max: Math.max(1, Math.ceil(visual.numerator / visual.denominator)),
+            subdivisions: visual.denominator,
             label: `Each step is 1/${visual.denominator}`,
             atWord: 0,
           },
@@ -298,7 +309,7 @@ export function visualActionSequence(
             id: `${id}-jump`,
             owner: "tutor",
             from: 0,
-            to: visual.numerator,
+            to: visual.numerator / visual.denominator,
             label: `${visual.numerator}/${visual.denominator}`,
             atWord: 7,
           },

@@ -164,7 +164,10 @@ test("profile editing is scoped, preserves mastery, validates subjects and keeps
   assert.equal(changed.grade, 6);
   assert.equal(ownedChild(parent.id, sibling.child.id).grade, 4);
   assert.deepEqual(learnerFor(f.child.id), history);
-  assert.equal(availableLesson(changed, history), null);
+  assert.match(
+    availableLesson(changed, history)!.targetConcept,
+    /^g6_science_/,
+  );
   assert.ok(startSession(changed, "lesson").id === f.id);
   assert.throws(
     () =>
@@ -196,7 +199,11 @@ test("profile editing is scoped, preserves mastery, validates subjects and keeps
   current.completedAt = new Date().toISOString();
   current.state = "COMPLETE";
   saveSession(current);
-  assert.throws(() => startSession(changed, "lesson"), /not available/);
+  const secondaryLesson = startSession(changed, "lesson");
+  assert.equal(secondaryLesson.question.subject, "Science");
+  secondaryLesson.state = "COMPLETE";
+  secondaryLesson.completedAt = new Date().toISOString();
+  saveSession(secondaryLesson);
   const younger = updateChildPreferences(parent.id, f.child.id, {
     grade: 4,
     subjects: ["Science"],

@@ -1,8 +1,11 @@
 import raw from "../../../content/curriculum/grades-1-5.json";
+import { secondaryCurriculum } from "../../../content/curriculum/secondary";
 import { skillContentSchema } from "../../../content/curriculum/schema";
 import type { Concept, Question, Visual } from "../types";
 import type { Rubric, TeachingMaterial } from "./types";
-export const curriculumContent = skillContentSchema.array().parse(raw);
+export const curriculumContent = skillContentSchema
+  .array()
+  .parse([...raw, ...secondaryCurriculum]);
 export const expandedMisconceptions = curriculumContent.flatMap((c) =>
   c.misconceptions.map((m) => ({
     id: m.id,
@@ -27,6 +30,11 @@ export const expandedConcepts: Concept[] = curriculumContent.map((s) => ({
   description: s.objective,
   gradeBand: [s.grade, s.grade],
   gradeRange: [s.grade, s.grade],
+  courseId: s.courseId ?? undefined,
+  recommendedGradeRange: [
+    s.recommendedGradeMin ?? s.grade,
+    s.recommendedGradeMax ?? s.grade,
+  ],
   prerequisites: s.prerequisites,
   learningObjectives: [s.objective],
   misconceptionIds: s.misconceptions.map((m) => m.id),

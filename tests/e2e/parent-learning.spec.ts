@@ -79,10 +79,10 @@ test("parent evidence, skill details and isolated grade/subject editing", async 
   ).toBeTruthy();
   await page.goto(`/learn/${child.id}`);
   await expect(
-    page.getByRole("heading", { name: "Grade 6 lessons are coming" }),
+    page.getByRole("heading", { name: "Grade 6 curriculum" }),
   ).toBeVisible();
   await page.goto(`/dev/${child.id}`);
   await expect(
-    page.getByRole("heading", { name: "Curriculum pending" }),
+    page.getByRole("heading", { name: "Da Vinci personalization debugger" }),
   ).toBeVisible();
 });

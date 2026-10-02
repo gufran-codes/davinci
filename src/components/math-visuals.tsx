@@ -137,6 +137,8 @@ export function CounterGroup({
 }
 export function MathVisual({ visual }: { visual: Visual }) {
   switch (visual.type) {
+    case "equation":
+      return <div className="action-equation">{visual.equation}</div>;
     case "fraction_bar":
       return <FractionBar {...visual} />;
     case "comparison":

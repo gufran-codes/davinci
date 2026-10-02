@@ -4,6 +4,7 @@ import { chooseDecision, updateStrategy } from "../learning";
 import type { Child, Learner, LearningSession, Visual } from "../types";
 import { freshSignals, rankStrategies } from "./strategies";
 import { materialFor } from "./content";
+import { selectSupportPlan, supportPlans } from "./grounded-support";
 import { supportMove } from "./policy";
 import type { CanvasCue, TeachingMemory } from "./types";
 export function memoryFor(s: LearningSession): TeachingMemory {
@@ -191,6 +192,26 @@ export function applySupport(
     signals = m.signals,
     previous = s.decision.strategy,
     concept = conceptById[s.question.conceptId];
+  const supportKey = s.question.assessmentKey ?? s.question.prompt;
+  if (m.usedSupportPlans?.questionId !== supportKey)
+    m.usedSupportPlans = { questionId: supportKey, ids: [] };
+  const plan = selectSupportPlan(
+    supportPlans(
+      s.question,
+      getQuestion(
+        s.question.conceptId,
+        Number(s.question.id.split(":")[1] ?? 0) + 1,
+      ),
+    ).filter(
+      (p) =>
+        kind === "hint" ||
+        (p.strategy !== previous && !signals.strategyFailures[p.strategy]),
+    ),
+    m.usedSupportPlans.ids,
+    kind === "show",
+  );
+  m.usedSupportPlans.ids = [...m.usedSupportPlans.ids, plan.id].slice(-12);
+  m.supportPlan = { ...plan, questionId: s.question.id };
   if (kind === "hint") {
     m.hintLevel = Math.min(7, m.hintLevel + 1);
     signals.hintCount++;
@@ -288,18 +309,14 @@ export function applySupport(
     mastery: l.states[concept.id]?.masteryScore ?? 0.25,
     age: child.age,
   });
-  const selected =
-    kind === "show"
-      ? (ranked.find((x) =>
-          ["quantity", "diagram", "objects"].includes(x.representation),
-        ) ?? ranked[0])
-      : ranked[0];
-  s.decision.strategy = selected?.id ?? "guided_questioning";
+  const selected = ranked.find((x) => x.id === plan.strategy);
+  s.decision.strategy = plan.strategy;
   s.decision.strategyId = s.decision.strategy;
   s.decision.pedagogicalMove = supportMove(kind, m.hintLevel);
   s.decision.scaffoldingLevel = selected?.support ?? 1;
   s.assistance = Math.min(2, Math.max(1, s.decision.scaffoldingLevel));
-  s.decision.reason = selected?.reason ?? "Try a guided question.";
+  s.decision.reason =
+    selected?.reason ?? "Use an unused explanation grounded in this question.";
   s.decision.personalization =
     "That approach wasn’t helping. Let’s change how we look at it.";
   m.hintLevel = 0;
@@ -312,7 +329,10 @@ export function applySupport(
   m.checkpoint = {
     questionId: s.question.id,
     strategy: s.decision.strategy,
-    prompt: checkpointPrompt(s),
+    prompt:
+      m.supportPlan?.questionId === s.question.id
+        ? plan.prompt
+        : checkpointPrompt(s),
   };
   addAssistance(
     s,
@@ -493,6 +513,16 @@ export function spokenTeaching(s: LearningSession) {
             ["table", "map", "timeline", "passage"].includes(v.type),
           );
   }
+  // A support plan is an item-grounded contract between speech and canvas.
+  // Do not attach a generic diagram or unrelated example to this explanation.
+  const grounded =
+    m.supportPlan?.questionId === q.id && s.assistance > 0
+      ? m.supportPlan
+      : undefined;
+  if (grounded) {
+    message = `${grounded.message} ${grounded.prompt}`;
+    visuals = grounded.visuals;
+  }
   const cues: CanvasCue[] = [
     {
       id: "model",
@@ -526,6 +556,7 @@ export function spokenTeaching(s: LearningSession) {
       ),
   );
   if (
+    !grounded &&
     s.question.conceptId === "equivalent_fractions" &&
     s.decision.strategy === "visual_fraction_model" &&
     s.assistance > 0 &&

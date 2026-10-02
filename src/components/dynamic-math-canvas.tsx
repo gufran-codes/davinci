@@ -20,13 +20,15 @@ function NumberLineStage({ actions }: { actions: CanvasAction[] }) {
     ): action is Extract<CanvasAction, { type: "animateNumberLineJump" }> =>
       action.type === "animateNumberLineJump",
   );
-  const count = Math.max(1, line.max - line.min);
+  const range = Math.max(1, line.max - line.min);
+  const divisions = line.subdivisions ?? 1;
+  const count = Math.min(100, range * divisions);
   return (
     <figure className="action-number-line">
       {line.label && <figcaption>{line.label}</figcaption>}
       <div className="action-line-track">
         {Array.from({ length: count + 1 }, (_, index) => {
-          const value = line.min + index;
+          const value = line.min + (index * range) / count;
           return (
             <span
               className="action-line-mark"
@@ -34,13 +36,17 @@ function NumberLineStage({ actions }: { actions: CanvasAction[] }) {
               style={{ left: `${(index / count) * 100}%` }}
             >
               <i />
-              <small>{value}</small>
+              <small>
+                {Number.isInteger(value)
+                  ? value
+                  : `${Math.round(value * divisions)}/${divisions}`}
+              </small>
             </span>
           );
         })}
         {jumps.map((jump, index) => {
-          const left = ((jump.from - line.min) / count) * 100;
-          const width = ((jump.to - jump.from) / count) * 100;
+          const left = ((jump.from - line.min) / range) * 100;
+          const width = ((jump.to - jump.from) / range) * 100;
           return (
             <span
               className="number-line-jump"
@@ -111,11 +117,13 @@ function ArrayAndCounters({ actions }: { actions: CanvasAction[] }) {
       {Array.from({ length: counters.groups }, (_, group) => (
         <div key={group}>
           {Array.from(
-            { length: Math.ceil(counters.total / counters.groups) },
+            {
+              length:
+                Math.floor(counters.total / counters.groups) +
+                (group < counters.total % counters.groups ? 1 : 0),
+            },
             (_, index) => {
-              const number =
-                group * Math.ceil(counters.total / counters.groups) + index;
-              return number < counters.total ? <i key={index} /> : null;
+              return <i key={index} />;
             },
           )}
         </div>
@@ -158,8 +166,14 @@ function GraphStage({ actions }: { actions: CanvasAction[] }) {
   );
   return (
     <figure className="coordinate-stage">
-      <div className="coordinate-axis x-axis" />
-      <div className="coordinate-axis y-axis" />
+      <div
+        className="coordinate-axis x-axis"
+        style={{ top: `${(graph.maxY / (graph.maxY - graph.minY)) * 100}%` }}
+      />
+      <div
+        className="coordinate-axis y-axis"
+        style={{ left: `${(-graph.minX / (graph.maxX - graph.minX)) * 100}%` }}
+      />
       {points.map((point) => (
         <span
           key={point.id}
@@ -230,9 +244,18 @@ export function DynamicMathCanvas({ actions }: { actions: CanvasAction[] }) {
           {shape.shape === "circle" ? (
             <circle cx="150" cy="80" r="55" />
           ) : shape.shape === "triangle" ? (
-            <path d="M65 140 L150 25 L235 140 Z" />
+            <path
+              d={`M${150 - (60 * shape.width) / Math.max(shape.width, shape.height)} 135 L150 ${135 - (120 * shape.height) / Math.max(shape.width, shape.height)} L${150 + (60 * shape.width) / Math.max(shape.width, shape.height)} 135 Z`}
+            />
           ) : (
-            <rect x="65" y="35" width="170" height="100" />
+            <rect
+              x={150 - (60 * shape.width) / Math.max(shape.width, shape.height)}
+              y={80 - (60 * shape.height) / Math.max(shape.width, shape.height)}
+              width={(120 * shape.width) / Math.max(shape.width, shape.height)}
+              height={
+                (120 * shape.height) / Math.max(shape.width, shape.height)
+              }
+            />
           )}
           <text x="150" y="160" textAnchor="middle">
             {shape.label}

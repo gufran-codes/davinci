@@ -10,7 +10,7 @@ const globalDb = globalThis as unknown as {
   primerSchema?: string;
 };
 export function db() {
-  const schemaVersion = "009_study_schedule";
+  const schemaVersion = "009_study_schedule:us-secondary-v1";
   if (globalDb.primerDb && globalDb.primerSchema === schemaVersion)
     return globalDb.primerDb;
   const filename =
@@ -79,6 +79,18 @@ export function db() {
     timestamp,
     timestamp,
   );
+  d.prepare(
+    "INSERT INTO curriculum_sources(id,name,source_url,usage_rights,attribution,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING",
+  ).run(
+    "davinci-us-secondary-v1",
+    "Da Vinci original US secondary practice",
+    "urn:davinci:us-secondary-v1",
+    "internal_original",
+    "Original AI-authored practice; educator review pending. Standards are scope references only.",
+    "{}",
+    timestamp,
+    timestamp,
+  );
   const insert = d.prepare(
     "INSERT INTO concepts(id,name,domain,subject,data,course_id,domain_id,topic_id,recommended_grade_min,recommended_grade_max,curriculum_status,curriculum_version,source_id,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,domain=excluded.domain,subject=excluded.subject,data=excluded.data,domain_id=excluded.domain_id,topic_id=excluded.topic_id,recommended_grade_min=excluded.recommended_grade_min,recommended_grade_max=excluded.recommended_grade_max,curriculum_status=excluded.curriculum_status,curriculum_version=excluded.curriculum_version,source_id=excluded.source_id,updated_at=excluded.updated_at",
   );
@@ -116,14 +128,14 @@ export function db() {
       c.domain,
       c.subject,
       JSON.stringify(c),
-      null,
+      c.courseId ?? null,
       domainId,
       topicId,
       c.gradeRange[0],
       c.gradeRange.at(-1) ?? c.gradeRange[0],
       content?.status ?? "draft",
       content?.curriculumVersion ?? "legacy-v1",
-      "davinci-legacy-baseline",
+      content?.sourceId ?? "davinci-legacy-baseline",
       timestamp,
     );
     d.prepare(

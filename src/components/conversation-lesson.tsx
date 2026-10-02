@@ -273,6 +273,11 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
               {p?.returningTo ? "A HELPFUL BUILDING BLOCK" : "OUR FOCUS"}
             </span>
             <h1>{p?.currentSkill ?? "A little learning, just for you"}</h1>
+            {!complete && (
+              <p className="lesson-task" aria-label="Current problem">
+                {session.question.prompt}
+              </p>
+            )}
             {p?.returningTo && (
               <p className="muted small">
                 Then we’ll return to {p.returningTo.toLowerCase()}.
@@ -382,7 +387,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                 }[status]}
           </span>
           <p className="spoken-turn" aria-live={voice ? "off" : "polite"}>
-            {p?.text ?? session.question.prompt}
+            {p?.spokenText ?? p?.text ?? session.question.prompt}
           </p>
           {interim && <p className="child-transcript">“{interim}”</p>}
           {!complete && (

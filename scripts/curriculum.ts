@@ -6,10 +6,12 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { skillContentSchema } from "../content/curriculum/schema";
 import { conceptById, concepts, getQuestion } from "../src/lib/curriculum";
+import { curriculumContent } from "../src/lib/teaching/content";
 const file = path.join(process.cwd(), "content/curriculum/grades-1-5.json");
-const records = skillContentSchema
+const primaryRecords = skillContentSchema
   .array()
   .parse(JSON.parse(readFileSync(file, "utf8")));
+const records = structuredClone(curriculumContent);
 const [command = "validate", id, reviewer] = process.argv.slice(2);
 if (command === "coverage") {
   console.table(curriculumCoverage());
@@ -45,12 +47,13 @@ if (command === "coverage") {
   }
   for (const c of concepts) walk(c.id, new Set());
   const report = [];
-  for (let grade = 1; grade <= 5; grade++)
+  for (let grade = 1; grade <= 10; grade++)
     for (const subject of ["Math", "English", "Science", "Social Studies"]) {
       const r = records.filter(
         (c) => c.grade === grade && c.subject === subject,
       );
-      if (r.length < 8) errors.push(`Coverage gap: grade ${grade} ${subject}`);
+      if (r.length < (grade <= 5 || subject === "Math" ? 8 : 4))
+        errors.push(`Coverage gap: grade ${grade} ${subject}`);
       report.push({
         grade,
         subject,
@@ -81,12 +84,24 @@ if (command === "coverage") {
     throw Error(`Cannot mark content ${command}: ${issues.join("; ")}`);
   record.status = command === "review" ? "reviewed" : "approved";
   record.reviewer = reviewer;
-  writeFileSync(file, JSON.stringify(records, null, 2) + "\n");
+  if (record.grade <= 5) {
+    const index = primaryRecords.findIndex((c) => c.id === record.id);
+    primaryRecords[index] = record;
+    writeFileSync(file, JSON.stringify(primaryRecords, null, 2) + "\n");
+  } else {
+    const reviewFile = path.join(
+      process.cwd(),
+      "content/curriculum/secondary-review.json",
+    );
+    const reviews = JSON.parse(readFileSync(reviewFile, "utf8"));
+    reviews[record.id] = { status: record.status, reviewer };
+    writeFileSync(reviewFile, JSON.stringify(reviews, null, 2) + "\n");
+  }
 } else if (command === "draft") {
   const grade = Number(id),
     subject = reviewer,
     topic = process.argv.slice(5).join(" ");
-  if (!grade || grade < 1 || grade > 5 || !subject || !topic)
+  if (!grade || grade < 1 || grade > 10 || !subject || !topic)
     throw Error("Usage: npm run curriculum -- draft 4 Science Energy");
   const draft = {
     grade,

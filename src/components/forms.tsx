@@ -223,8 +223,8 @@ export function ChildForm() {
       </div>
       {grade > 5 && (
         <p className="small muted">
-          Grade {grade} profiles are supported. Lessons for this grade are still
-          being prepared; you can save your preferences now.
+          Grade {grade} includes US standards-referenced practice in all four
+          subjects. This growing lesson collection is pending educator review.
         </p>
       )}
       <fieldset className="subject-picker">

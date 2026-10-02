@@ -53,7 +53,11 @@ function CanvasVisual({
             {visual.nodes.map((n, i) => (
               <span key={i}>
                 {n}
-                {i < visual.nodes.length - 1 && <b aria-hidden>→</b>}
+                {visual.links
+                  .filter(([from]) => from === i)
+                  .map(([, to]) => (
+                    <small key={to}> → {visual.nodes[to]}</small>
+                  ))}
               </span>
             ))}
           </div>

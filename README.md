@@ -1,11 +1,16 @@
 # Da Vinci — A tutor that learns how to teach your child
 
-Da Vinci is a personalized tutor for Grades 1–5 across Math, English, Science,
+Da Vinci is a personalized tutor for Grades 1–10 across Math, English, Science,
 and Social Studies. Same grade, same subject, different child, different
 teaching. Its core loop is: model what the child knows (knowledge model), track
 how they learn best (teaching model), choose the teaching strategy the evidence
 supports, then teach differently next time — and show that adaptation to the
 parent.
+
+Grades 6–10 now include a US standards-referenced starter collection of 100
+skills and 420 items. These are draft practice lessons, not a complete or
+educator-approved curriculum. See [contextual tutoring and secondary scope](docs/contextual-tutoring-and-secondary.md)
+for the teaching changes, sources, verification, and remaining coverage work.
 
 Lessons are organized by assigned grade → subject → domain → topic → skill.
 New lessons stay within that grade. Prerequisite recovery may briefly revisit

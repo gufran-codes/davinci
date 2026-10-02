@@ -62,7 +62,7 @@ test("onboarding validation matches grades 1-10, ages 6-16, and chosen subjects"
   );
 });
 
-test("high-school profiles can be created without pretending curriculum is available", () => {
+test("high-school profiles launch the secondary curriculum in their chosen subject", () => {
   const user = register(
     "High School",
     "high-school@test.local",
@@ -77,7 +77,9 @@ test("high-school profiles can be created without pretending curriculum is avail
   });
   const child = createChild(user.id, input);
   assert.equal(ownedChild(user.id, child.id).grade, 10);
-  assert.throws(() => startSession(child, "lesson"), /curriculum|available/i);
+  const session = startSession(child, "lesson");
+  assert.equal(session.question.subject, "Science");
+  assert.match(session.plan.targetConcept, /^g10_science_/);
 });
 
 test("child subjects persist with a Math default", () => {

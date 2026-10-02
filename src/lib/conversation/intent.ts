@@ -88,6 +88,12 @@ export function understandLocally(
 ): UnderstoodTurn {
   const t = transcript.toLowerCase().replace(/[’]/g, "'").trim();
   if (
+    /\b(?:another|other|different|alternate) (?:way|method|approach|solution)\b/.test(
+      t,
+    )
+  )
+    return { intent: "confused", confidence: "low" };
+  if (
     /\b(step by step|one step at a time|walk me through|help me with (?:the )?steps)\b/.test(
       t,
     )
@@ -152,6 +158,15 @@ export function understandLocally(
     return { intent: "rapport" };
   if (/\b(show me|picture|draw|see it|a visual)\b/.test(t))
     return { intent: "show" };
+  if (
+    /^(?:wait[, ]+)?(?:why|how|what|can you explain|could you explain)\b/.test(
+      t,
+    )
+  )
+    return {
+      intent: /\b(?:mean|define|what is|what are)\b/.test(t) ? "define" : "why",
+      term: t,
+    };
   if (
     /\b(what (does|is|are).*mean|what is (a |the )?(denominator|numerator|fraction)|define)\b/.test(
       t,

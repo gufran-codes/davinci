@@ -21,6 +21,36 @@ export interface GuidedPractice {
 // Functions/answer keys are derived server-side, never stored in student memory.
 export function guidedSteps(q: Question): GuidedStep[] {
   if (q.subject !== "Math") return [];
+  const equation = q.prompt.match(/^Solve (\d*)x \+ (\d+) = (\d+)\./);
+  if (equation) {
+    const coefficient = Number(equation[1] || 1),
+      constant = Number(equation[2]),
+      total = Number(equation[3]);
+    if (
+      coefficient > 1 &&
+      (total - constant) / coefficient === parseMath(q.answer)
+    )
+      return [
+        {
+          id: "subtract-constant",
+          expected: total - constant,
+          prompt: `Subtract ${constant} from both sides. What is the new right-hand side?`,
+          explanation: `Subtracting ${constant} undoes the addition while preserving equality. We are finding the remaining total, not x yet.`,
+          equation: `${coefficient}x = ${total} - ${constant}`,
+          check: (n) =>
+            `${total} - ${constant} is not ${n}. Take away ${constant} from ${total} and check by adding it back.`,
+        },
+        {
+          id: "isolate-operation",
+          expected: coefficient,
+          prompt: `We now have ${coefficient}x = ${total - constant}. What number should we divide both sides by?`,
+          explanation: `The coefficient multiplies x. Dividing both sides by that coefficient undoes the multiplication.`,
+          equation: `${coefficient}x ÷ ? = ${total - constant} ÷ ?`,
+          check: (n) =>
+            `Dividing by ${n} does not cancel the coefficient ${coefficient}. We need the coefficient of x to become 1.`,
+        },
+      ];
+  }
   const array = q.visuals.find((v) => v.type === "array");
   if (
     array?.type === "array" &&

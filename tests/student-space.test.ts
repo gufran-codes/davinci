@@ -103,10 +103,7 @@ test("only enabled subjects with available curriculum can be scheduled", () => {
     /available/,
   );
   updateChildPreferences(parent.id, a.id, { grade: 9, subjects: ["Math"] });
-  assert.throws(
-    () => scheduleStudy(parent.id, a.id, booking, now),
-    /available/,
-  );
+  assert.equal(scheduleStudy(parent.id, a.id, booking, now).subject, "Math");
 });
 test("schedule follows child deletion and does not leave orphan records", () => {
   const a = child(),

@@ -3154,6 +3154,15 @@ small,
   color: #82936e;
   margin-bottom: 20px;
 }
+.lesson-task {
+  white-space: pre-wrap;
+  line-height: 1.65;
+  max-width: 70ch;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid currentColor;
+  background: rgba(65, 91, 74, 0.04);
+  border-radius: 0 12px 12px 0;
+}
 .spoken-turn {
   font: 21px/1.6 var(--serif);
   letter-spacing: -0.2px;

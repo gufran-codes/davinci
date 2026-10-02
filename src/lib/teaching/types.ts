@@ -97,6 +97,10 @@ export interface HintEvent {
   studentSucceededAfterHint?: boolean;
 }
 export interface TeachingMemory {
+  supportPlan?: import("./grounded-support").SupportPlan & {
+    questionId: string;
+  };
+  usedSupportPlans?: { questionId: string; ids: string[] };
   intelligence?: import("./session-intelligence").SessionIntelligence;
   recentReasoning: string[];
   recentTutorQuestions: string[];

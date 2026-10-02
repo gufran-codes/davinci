@@ -44,6 +44,7 @@ import {
   requestsGuidedSteps,
 } from "../lib/teaching/guided-steps";
 import { beginGuidedPractice, respondToGuidedStep } from "./guided-teaching";
+import { answerLessonQuestion } from "../lib/teaching/grounded-support";
 export interface ConversationInput {
   requestId: string;
   version: number;
@@ -206,7 +207,9 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
     checks.push("subject_irrelevant_question");
   if (
     memoryFor(s).guidedPractice &&
-    !["wait", "rapport", "reveal", "define", "confidence"].includes(p.intent) &&
+    !["wait", "rapport", "reveal", "define", "why", "confidence"].includes(
+      p.intent,
+    ) &&
     questions.at(-1) !== focusingQuestion(s)
   )
     checks.push("guided_question_changed");
@@ -236,7 +239,15 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
     revised = true;
   } else if (
     p.canAnswer &&
-    !["rapport", "resume", "repeat", "wait"].includes(p.intent) &&
+    ![
+      "rapport",
+      "resume",
+      "repeat",
+      "wait",
+      "why",
+      "define",
+      "off_topic",
+    ].includes(p.intent) &&
     !speech.includes("?")
   ) {
     speech = `${speech} ${freshFocusingQuestion(s)}`;
@@ -787,10 +798,10 @@ export function converse(
       } else direct = result?.text;
     } else if (
       m.guidedPractice &&
-      ["hint", "why", "resume", "repeat"].includes(turn.intent)
+      ["hint", "resume", "repeat"].includes(turn.intent)
     ) {
       const step = guidedSteps(s.question)[m.guidedPractice.stepIndex];
-      direct = `${turn.intent === "hint" || turn.intent === "why" ? `${step.explanation} ` : ""}${step.prompt}`;
+      direct = `${turn.intent === "hint" ? `${step.explanation} ` : ""}${step.prompt}`;
     } else if (checkpointObservation) {
       const checkpoint = m.checkpoint!;
       const observation = assessReasoning(
@@ -879,7 +890,7 @@ export function converse(
             ? "Here’s one small step."
             : turn.intent === "show"
               ? "Yes—let’s put it on the canvas."
-              : "Let’s try a genuinely different way.";
+              : "We can look at it another way.";
     } else if (turn.intent === "feedback") {
       m.guidedPractice = undefined;
       if (s.feedback) s.feedback = null;
@@ -896,15 +907,13 @@ export function converse(
         s.question,
         getQuestion(s.question.conceptId, 91),
       );
-      const term = (turn.term ?? "").replace(/[?.]/g, "").trim();
-      const entry = Object.entries(material.glossary).find(([key]) =>
-        term.includes(key),
-      );
-      direct = entry
-        ? `${entry[1]} What does that tell you about this question?`
-        : turn.intent === "why"
-          ? `${material.strategyHint} Which part would you like to look at together?`
-          : "Which word in this question would you like to unpack?";
+      const activeStep = m.guidedPractice
+        ? guidedSteps(s.question)[m.guidedPractice.stepIndex]
+        : undefined;
+      direct =
+        answerLessonQuestion(s.question, input.transcript, material.glossary) ??
+        activeStep?.explanation ??
+        `I want to answer the part you mean. Are you asking about “${s.question.hint.split(/[.!?]/)[0]}”, or a different step?`;
       s.assistance = Math.max(1, s.assistance);
     } else if (turn.intent === "confidence") {
       direct =
@@ -920,9 +929,9 @@ export function converse(
         : /thank/i.test(input.transcript)
           ? review
             ? "You’re welcome. Before we finish, did this feel clearer, ready for more, or still tricky?"
-            : `You’re welcome. Let’s keep working together: ${s.question.prompt}`
+            : "You’re welcome. Take your time—I’m here if you need me."
           : /sorry/i.test(input.transcript)
-            ? `You don’t need to apologize. We can reset and try together: ${s.question.prompt}`
+            ? "No need to apologize. What would you like to go over?"
             : /how are you/i.test(input.transcript)
               ? "I’m ready to learn with you. How are you feeling about this problem?"
               : /(?:your name|who are you)/i.test(input.transcript)
@@ -1063,6 +1072,21 @@ export function converse(
     if (direct) {
       p.text = direct;
       p.spokenText = direct;
+      if (
+        s.conversation &&
+        [
+          "why",
+          "define",
+          "rapport",
+          "off_topic",
+          "confidence",
+          "wait",
+          "repeat",
+        ].includes(turn.intent)
+      ) {
+        p.cues = structuredClone(s.conversation.cues);
+        p.canvasActions = structuredClone(s.conversation.canvasActions ?? []);
+      }
       p.cues = p.cues.map((cue) => ({
         ...cue,
         atWord: cue.action === "show" ? 0 : Math.min(cue.atWord, 8),

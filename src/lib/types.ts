@@ -58,6 +58,7 @@ export const strategyNames: Record<Strategy, string> = {
   concrete_to_abstract: "From objects to symbols",
 };
 export type Visual =
+  | { type: "equation"; equation: string }
   | {
       type: "fraction_bar";
       numerator: number;
