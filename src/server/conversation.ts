@@ -6,8 +6,8 @@ import {
 import { randomUUID } from "node:crypto";
 import { conceptById, getQuestion, gradeQuestion } from "../lib/curriculum";
 import {
-  understandLocally,
   spokenMath,
+  requestsSessionEnd,
   UnderstoodTurn,
 } from "../lib/conversation/intent";
 import {
@@ -27,7 +27,7 @@ import type {
   ConversationIntent,
   ConversationPresentation,
 } from "../lib/teaching/types";
-import { advanceSession } from "./orchestrator";
+import { advanceSession, finalizeSession } from "./orchestrator";
 import {
   event,
   HttpError,
@@ -45,6 +45,13 @@ import {
 } from "../lib/teaching/guided-steps";
 import { beginGuidedPractice, respondToGuidedStep } from "./guided-teaching";
 import { answerLessonQuestion } from "../lib/teaching/grounded-support";
+import { dialogueFocus } from "../lib/conversation/dialogue";
+import { interpretTaskUtterance } from "../lib/conversation/interpretation";
+import {
+  taskSnapshot,
+  responsePlan,
+  type TurnTrace,
+} from "../lib/conversation/grounding";
 export interface ConversationInput {
   requestId: string;
   version: number;
@@ -60,51 +67,21 @@ function focusingQuestion(s: LearningSession) {
     const step = guidedSteps(s.question)[m.guidedPractice.stepIndex];
     if (step) return step.prompt;
   }
-  if (m.checkpoint) return m.checkpoint.prompt;
-  const material = materialFor(
-    s.question,
-    getQuestion(s.question.conceptId, 91),
-  );
-  if (s.question.subject === "Math") return material.guidingQuestion;
-  if (s.question.subject === "English")
-    return "Which words or details support your idea?";
-  if (s.question.subject === "Science")
-    return "What did you observe, and what changed?";
-  return "Which piece of evidence helps you decide?";
+  if (m.checkpoint) {
+    if (
+      /what part of (?:that|the|this) story matches|which fact, label, or event|tell me how it felt/i.test(
+        m.checkpoint.prompt,
+      )
+    ) {
+      m.checkpoint = undefined;
+    } else return m.checkpoint.prompt;
+  }
+  return dialogueFocus(s).prompt;
 }
 function freshFocusingQuestion(s: LearningSession) {
-  const memory = memoryFor(s);
-  const bySubject: Record<string, string[]> = {
-    Math: [
-      focusingQuestion(s),
-      "Which quantity do you know, and which one are you trying to find?",
-      "What operation or relationship fits what the question is asking?",
-    ],
-    English: [
-      "Which exact words or details support your idea?",
-      "What in the text made you think that?",
-      "How would you explain your idea using one detail from the text?",
-    ],
-    Science: [
-      "What did you observe, and what changed?",
-      "Which evidence supports your explanation?",
-      "What would you predict from the evidence in this question?",
-    ],
-    "Social Studies": [
-      "Which fact, label, or event helps you decide?",
-      "What evidence in the source supports your idea?",
-      "How does the place, time, or point of view affect your answer?",
-    ],
-  };
-  const candidates = bySubject[s.question.subject] ?? [focusingQuestion(s)];
-  return (
-    candidates.find(
-      (candidate) =>
-        !memory.recentTutorQuestions.some(
-          (recent) => similarity(recent, candidate) > 0.72,
-        ),
-    ) ?? candidates[memory.responseOrdinal % candidates.length]
-  );
+  // Return to the actual unresolved task. Subject-wide question rotations lose
+  // the evidence/quantities the child was answering and create generic loops.
+  return focusingQuestion(s);
 }
 function questionsIn(text: string) {
   return (text.match(/[^.!?]*\?/g) ?? [])
@@ -155,7 +132,23 @@ function teachingMode(s: LearningSession) {
 }
 function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
   let speech = (p.spokenText ?? p.text).replace(/\s+/g, " ").trim();
+  // Review and completion are lifecycle messages, not teaching questions.
+  if (["SESSION_REVIEW", "COMPLETE"].includes(s.state)) {
+    p.spokenText = speech;
+    p.verification = {
+      passed: true,
+      revised: false,
+      checks: ["session_lifecycle"],
+    };
+    return;
+  }
   const checks: string[] = [];
+  if (
+    /tell me how it felt|a little clearer, ready for more, or still tricky/i.test(
+      speech,
+    )
+  )
+    checks.push("reflection_outside_review");
   let revised = false;
   if (wordCount(speech) > 65) checks.push("too_many_tutor_words");
   if ((speech.match(/\?/g) ?? []).length > 2) checks.push("too_many_questions");
@@ -175,7 +168,13 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
     ).test(speech)
   )
     checks.push("answer_leak");
-  const previous = s.conversation?.spokenText ?? s.conversation?.text ?? "";
+  const previous =
+    s.conversation?.spokenText ??
+    s.conversation?.text ??
+    memoryFor(s)
+      .recentTutorTurns?.filter((t) => t.turnId !== p.turnId)
+      .at(-1)?.text ??
+    "";
   const returningFromSteps =
     p.teachingMove === "return_to_task" ||
     (s.conversation?.teachingMove === "guided_step" &&
@@ -190,6 +189,12 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
     checks.push("repeated_tutor_turn");
   const questions = questionsIn(speech);
   if (
+    questions.some((question) =>
+      /what part of (?:that|the|this) story matches/i.test(question),
+    )
+  )
+    checks.push("subject_irrelevant_question");
+  if (
     p.intent !== "repeat" &&
     !memoryFor(s).guidedPractice &&
     !returningFromSteps &&
@@ -202,6 +207,7 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
     checks.push("repeated_tutor_question");
   if (
     s.question.subject !== "English" &&
+    !s.question.visuals.some((v) => v.type === "passage") &&
     questions.some((question) => /\b(?:story|text|passage)\b/i.test(question))
   )
     checks.push("subject_irrelevant_question");
@@ -236,21 +242,6 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
       explanation && wordCount(`${explanation} ${nextQuestion}`) <= 65
         ? `${explanation} ${nextQuestion}`
         : `Let’s pause on one idea. ${nextQuestion}`;
-    revised = true;
-  } else if (
-    p.canAnswer &&
-    ![
-      "rapport",
-      "resume",
-      "repeat",
-      "wait",
-      "why",
-      "define",
-      "off_topic",
-    ].includes(p.intent) &&
-    !speech.includes("?")
-  ) {
-    speech = `${speech} ${freshFocusingQuestion(s)}`;
     revised = true;
   }
   const finalQuestions = questionsIn(speech);
@@ -296,6 +287,7 @@ export function replaceTutorSpeech(
     turnId: string;
     version: number;
     spokenText: string;
+    quality?: NonNullable<TurnTrace["quality"]>;
   },
 ) {
   return transaction(() => {
@@ -326,7 +318,18 @@ export function replaceTutorSpeech(
     }
     s.conversation = undefined;
     verifyTutorTurn(s, p);
+    if (input.quality?.usedFallback && p.verification) {
+      p.verification.passed = false;
+      p.verification.revised = true;
+      p.verification.checks = [
+        ...new Set([...p.verification.checks, ...input.quality.checks]),
+      ];
+    }
     s.conversation = p;
+    if (memory.lastTurnTrace) memory.lastTurnTrace.quality = input.quality;
+    memory.recentTutorTurns = (memory.recentTutorTurns ?? []).map((t) =>
+      t.turnId === p.turnId ? { ...t, text: p.spokenText ?? p.text } : t,
+    );
     memory.wordShare.tutor += wordCount(p.spokenText ?? p.text) - previousWords;
     saveSession(s);
     const row = one<{ data: string }>(
@@ -341,6 +344,7 @@ export function replaceTutorSpeech(
     }
     const data = JSON.parse(row.data) as Record<string, unknown>;
     data.presentation = p;
+    data.trace = memory.lastTurnTrace;
     run(
       "UPDATE conversation_turns SET generated_tutor_text=?,data=? WHERE id=? AND session_id=? AND child_id=?",
       p.spokenText ?? p.text,
@@ -352,6 +356,7 @@ export function replaceTutorSpeech(
     event(s, "tutor_speech_rendered", {
       turnId: input.turnId,
       verification: p.verification,
+      quality: input.quality,
     });
     return s;
   });
@@ -498,6 +503,15 @@ function saveTurn(
 ) {
   s.conversation = p;
   const memory = memoryFor(s);
+  memory.recentTutorTurns = [
+    ...(memory.recentTutorTurns ?? []),
+    {
+      turnId: p.turnId,
+      questionId: s.question.id,
+      text: p.spokenText ?? p.text,
+    },
+  ].slice(-8);
+  if (memory.lastTurnTrace) memory.lastTurnTrace.responsePlan = responsePlan(s);
   const brain = sessionIntelligence(s)!;
   const explanation = (p.spokenText ?? p.text).slice(0, 600);
   if (
@@ -531,6 +545,7 @@ function saveTurn(
       source,
       questionId: s.question.id,
       decision: s.decision,
+      trace: memory.lastTurnTrace,
     }),
     now(),
   );
@@ -572,6 +587,11 @@ export function greeting(child: Child, id: string) {
       s.decision.pedagogicalMove = "show_visual";
       s.decision.scaffoldingLevel = 1;
     }
+    m.lastTurnTrace = {
+      inputTask: taskSnapshot(s),
+      interpretation: { intent: "resume" },
+      interpretationSource: "local",
+    };
     const p = presentation(
       s,
       "resume",
@@ -591,6 +611,7 @@ export function converse(
   id: string,
   input: ConversationInput,
   understood?: UnderstoodTurn,
+  trace?: TurnTrace,
 ): LearningSession {
   return transaction(() => {
     let s = sessionById(id);
@@ -601,6 +622,27 @@ export function converse(
       input.requestId,
     );
     if (prior) return s;
+    if (s.state === "COMPLETE") return s;
+    const requestedEnd =
+      requestsSessionEnd(input.transcript) ||
+      understood?.intent === "end_session" ||
+      understood?.intent === "finish";
+    if (requestedEnd) {
+      if (input.heard) deliveredSpeech(child, id, input.heard);
+      const memory = memoryFor(s);
+      memory.lastTurnTrace = {
+        inputTask: taskSnapshot(s),
+        interpretation: { intent: "end_session" },
+        interpretationSource: trace?.interpretationSource ?? "local",
+      };
+      memory.lastUtterance = input.transcript;
+      saveSession(s);
+      s = finalizeSession(child, id);
+      const p = presentation(s, "end_session");
+      verifyTutorTurn(s, p);
+      saveTurn(child, s, input.requestId, input.transcript, p, input.source);
+      return s;
+    }
     if (s.version !== input.version)
       throw new HttpError(
         409,
@@ -608,13 +650,7 @@ export function converse(
       );
     if (input.heard) deliveredSpeech(child, id, input.heard);
     const turn =
-        understood ??
-        understandLocally(
-          input.transcript,
-          s.teaching?.guidedPractice?.questionId === s.question.id
-            ? { ...s.question, choices: undefined }
-            : s.question,
-        ),
+        understood ?? interpretTaskUtterance(input.transcript, s, input.source),
       l = learnerFor(child.id),
       m = memoryFor(s);
     if (
@@ -623,6 +659,11 @@ export function converse(
         !guidedSteps(s.question)[m.guidedPractice.stepIndex])
     )
       m.guidedPractice = undefined;
+    m.lastTurnTrace = trace ?? {
+      inputTask: taskSnapshot(s),
+      interpretation: turn,
+      interpretationSource: "local",
+    };
     m.lastUtterance = input.transcript;
     if (turn.reasoning || turn.intent === "reasoning")
       m.recentReasoning = [
@@ -656,6 +697,7 @@ export function converse(
     m.signals.lastResponseAt = now();
     if (turn.confidence) m.signals.confidence = turn.confidence;
     if (turn.intent !== "wait") m.paused = false;
+    let assessment: ConversationPresentation["assessment"];
     let direct: string | undefined,
       prefix = "";
     let returnedFromGuidedSteps = false;
@@ -667,7 +709,13 @@ export function converse(
       "feedback",
       "resume",
     ].includes(turn.intent);
-    if (s.state === "SESSION_REVIEW" && asksForSupport) {
+    if (
+      s.state === "SESSION_REVIEW" &&
+      (asksForSupport ||
+        (!turn.needsClarification &&
+          ["answer", "correction"].includes(turn.intent) &&
+          !s.feedback))
+    ) {
       s.state = "TEACH";
       s.step = Math.max(3, s.step);
       s.feedback = null;
@@ -701,10 +749,15 @@ export function converse(
       ) &&
       input.transcript.trim().length > 0 &&
       !/\?\s*$/.test(input.transcript);
-    if (s.state === "COMPLETE")
+    if (turn.needsClarification || turn.ambiguity === "ambiguous") {
+      const focus = taskSnapshot(s).focus;
       direct =
-        "Your lesson is saved. You can return to your space whenever you’re ready.";
-    else if (turn.intent === "reveal") {
+        focus.kind === "guided_step" || focus.kind === "observation"
+          ? `I couldn’t tell which answer you meant for this step. ${focus.prompt}`
+          : s.question.choices?.length
+            ? "I couldn’t tell which choice you meant. Which option would you like to try? You can say its letter or tap it."
+            : `I couldn’t tell which answer you meant. ${s.question.prompt}`;
+    } else if (turn.intent === "reveal") {
       const access = answerAccess(s);
       if (!access.allowed)
         direct = access.masteryCheck
@@ -833,25 +886,23 @@ export function converse(
         );
         direct = `Let’s connect your idea to what we can check. ${material.attention} ${checkpoint.prompt}`;
       }
-    } else if (turn.intent === "finish") {
-      m.checkpoint = undefined;
-      m.guidedPractice = undefined;
-      if (s.state !== "SESSION_REVIEW") {
-        s.state = "SESSION_REVIEW";
-        s.version++;
-        saveSession(s);
-        direct =
-          "We can stop here. Did that feel a little clearer, ready for more, or still tricky?";
+    } else if (turn.intent === "reflection" && s.state === "SESSION_REVIEW") {
+      saveSession(s);
+      s = finalizeSession(
+        child,
+        id,
+        /tricky/i.test(input.transcript)
+          ? "Still tricky"
+          : /more/i.test(input.transcript)
+            ? "Ready for more"
+            : "A little clearer",
+      );
+    } else if (turn.intent === "reflection") {
+      if (turn.confidence === "low") {
+        applySupport(s, l, child, "another");
+        saveLearner(child.id, l);
       } else {
-        s = advanceSession(child, id, {
-          action: "reflect",
-          version: s.version,
-          reflection: /tricky/i.test(input.transcript)
-            ? "Still tricky"
-            : /more/i.test(input.transcript)
-              ? "Ready for more"
-              : "A little clearer",
-        });
+        direct = `Let’s try the current question with less help. ${s.question.prompt}`;
       }
     } else if (turn.intent === "wait") {
       m.paused = true;
@@ -986,8 +1037,11 @@ export function converse(
           "What detail or example supports your idea? You can also say “give me a hint.”";
     } else if (turn.intent === "answer" || turn.intent === "correction") {
       if (s.state === "SESSION_REVIEW") {
-        direct =
-          "Tell me how it felt: a little clearer, ready for more, or still tricky.";
+        s.state = "TEACH";
+        m.paused = false;
+        direct = s.feedback
+          ? "That question is already checked. We can keep practising, or you can finish the session."
+          : `We can keep working on this question. ${s.question.prompt}`;
       } else if (s.feedback) {
         direct =
           "We’ve checked that answer. Tell me why it works, or say continue.";
@@ -1000,6 +1054,12 @@ export function converse(
         else {
           saveSession(s);
           const correct = gradeQuestion(s.question, answer);
+          assessment = {
+            questionId: s.question.id,
+            prompt: s.question.prompt,
+            answer,
+            correct,
+          };
           m.checkpoint = undefined;
           s = advanceSession(child, id, {
             action: "answer",
@@ -1068,6 +1128,7 @@ export function converse(
       direct = `I’m listening, but I’m not sure which part you want to explore. Tell me your idea, ask about a word, or ask me to show it visually.`;
     s.version++;
     const p = presentation(s, turn.intent, prefix);
+    p.assessment = assessment;
     if (returnedFromGuidedSteps) p.teachingMove = "return_to_task";
     if (direct) {
       p.text = direct;

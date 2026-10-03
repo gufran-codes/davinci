@@ -34,17 +34,15 @@ async function say(page: Page, session: PublicSession, text: string) {
 }
 
 async function finish(page: Page, initial: PublicSession) {
-  let session = initial;
-  if (session.state !== "SESSION_REVIEW")
-    session = await say(page, session, "Finish for today");
-  expect(session.state).toBe("SESSION_REVIEW");
-  session = await say(page, session, "A little clearer");
-  expect(session.state).toBe("COMPLETE");
-  const completion = page.getByRole("link", {
-    name: "See your little step forward",
-  });
-  await expect(completion).toBeVisible();
-  await page.goto((await completion.getAttribute("href"))!);
+  const result = page.waitForResponse(
+    (r) =>
+      r.url().endsWith(`/api/sessions/${initial.id}/finish`) &&
+      r.request().method() === "POST",
+  );
+  await page
+    .getByRole("button", { name: "Finish session", exact: true })
+    .click();
+  expect((await (await result).json()).session.state).toBe("COMPLETE");
   await expect(page).toHaveURL(/\/complete$/);
 }
 

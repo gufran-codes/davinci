@@ -198,7 +198,11 @@ export class LiveKitVoiceTransport implements VoiceTransport {
     this.rejectReady?.(Error("Voice connection cancelled."));
     this.rejectReady = undefined;
     this.agentReady = undefined;
-    this.elements.forEach((e) => e.remove());
+    this.elements.forEach((e) => {
+      e.pause();
+      e.srcObject = null;
+      e.remove();
+    });
     this.elements = [];
     clearInterval(this.levelTimer);
     this.callbacks.onAudioLevel?.(0);

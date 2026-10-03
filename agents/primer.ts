@@ -55,13 +55,14 @@ export default defineAgent({
           Authorization: `Bearer ${metadata.token}`,
         },
         body: JSON.stringify(data),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(30000),
       });
       const body = await r.json();
       if (!r.ok) throw Error(body.error ?? "Da Vinci connection failed");
       return body;
     }
     async function publish(session: PublicSession) {
+      if (state && session.version < state.version) return;
       state = session;
       if (session.conversation)
         presentations.set(session.conversation.turnId, session.conversation);
@@ -95,6 +96,7 @@ export default defineAgent({
       async onEnter() {
         const result = await call({ action: "greet" });
         await publish(result.session);
+        if (state.state === "COMPLETE") return;
         this.session.say(
           state.conversation!.spokenText ?? state.conversation!.text,
           {
@@ -124,10 +126,13 @@ export default defineAgent({
           at: Date.now(),
         });
         await publish(result.session);
-        const text = state.conversation!.spokenText ?? state.conversation!.text;
+        const text =
+          state.state === "COMPLETE"
+            ? ""
+            : (state.conversation!.spokenText ?? state.conversation!.text);
         return new ReadableStream<string>({
           start(controller) {
-            controller.enqueue(text);
+            if (text) controller.enqueue(text);
             controller.close();
           },
         });
@@ -238,6 +243,7 @@ export default defineAgent({
             .then(async (result) => {
               session.interrupt({ force: true });
               await publish(result.session);
+              if (state.state === "COMPLETE") return;
               session.say(
                 state.conversation!.spokenText ?? state.conversation!.text,
                 { allowInterruptions: true },

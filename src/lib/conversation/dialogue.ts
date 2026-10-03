@@ -5,10 +5,10 @@ import { guidedSteps } from "../teaching/guided-steps";
 // same. Keep this derived from persisted session state, not an LLM guess.
 export function dialogueFocus(session: LearningSession) {
   const memory = session.teaching;
-  if (memory?.paused)
-    return { kind: "resume", prompt: "Say continue when you’re ready." };
   if (session.state === "COMPLETE")
     return { kind: "complete", prompt: "The lesson is saved." };
+  if (memory?.paused)
+    return { kind: "resume", prompt: "Say continue when you’re ready." };
   if (session.state === "SESSION_REVIEW")
     return {
       kind: "reflection",

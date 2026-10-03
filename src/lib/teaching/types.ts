@@ -16,7 +16,9 @@ export type ConversationIntent =
   | "correction"
   | "rapport"
   | "feedback"
-  | "finish"
+  | "finish" // Legacy persisted intent. New stopping commands use end_session.
+  | "end_session"
+  | "reflection"
   | "off_topic";
 export interface ConversationSignals {
   confusion: number;
@@ -97,6 +99,8 @@ export interface HintEvent {
   studentSucceededAfterHint?: boolean;
 }
 export interface TeachingMemory {
+  lastTurnTrace?: import("../conversation/grounding").TurnTrace;
+  recentTutorTurns?: { turnId: string; questionId: string; text: string }[];
   supportPlan?: import("./grounded-support").SupportPlan & {
     questionId: string;
   };
@@ -164,6 +168,12 @@ export interface CanvasCue {
   highlight?: string;
 }
 export interface ConversationPresentation {
+  assessment?: {
+    questionId: string;
+    prompt: string;
+    answer: string;
+    correct: boolean;
+  };
   turnId: string;
   text: string;
   spokenText?: string;

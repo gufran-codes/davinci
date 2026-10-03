@@ -192,6 +192,7 @@ export function TeachingCanvas({
     question =
       [...active].reverse().find((c) => c.action === "question") ??
       cues.find((c) => c.action === "question");
+  if (!activeActions.length && !model?.visuals.length && !question) return null;
   return (
     <section
       className={`teaching-canvas ${focus ? "canvas-focused" : ""}`}
@@ -210,12 +211,7 @@ export function TeachingCanvas({
             />
           ))}
         </div>
-      ) : (
-        <div className="canvas-rest">
-          <span aria-hidden>✳</span>
-          <p>A little space to think.</p>
-        </div>
-      )}
+      ) : null}
       {focus && <p className="canvas-focus-label">{focus.highlight}</p>}
       {question && <h2 className="canvas-question">{question.label}</h2>}
     </section>

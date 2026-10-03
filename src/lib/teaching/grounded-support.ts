@@ -143,6 +143,50 @@ export function supportPlans(q: Question, example: Question): SupportPlan[] {
       [{ type: "array", rows: array.columns, columns: array.rows }],
     );
   }
+  if (!plans.length && q.subject !== "Math") {
+    const source = q.visuals.filter((v) =>
+      ["passage", "table", "map", "timeline", "diagram"].includes(v.type),
+    );
+    const focus =
+      q.subject === "Science"
+        ? "observation or measurement"
+        : q.subject === "English"
+          ? "word or sentence"
+          : "date, map label, or source detail";
+    add(
+      "source-evidence",
+      "evidence_first",
+      q.hint,
+      `Which ${focus} in this task would you use as evidence?`,
+      source,
+    );
+    add(
+      "compare-claims",
+      "compare_contrast",
+      q.choices?.length
+        ? "Test the choices against the information shown. A claim needs support from this case, not just something that might happen elsewhere."
+        : "Separate what the source tells us from what we would need to find out.",
+      q.choices?.length
+        ? "Which choice can you rule out using a specific detail?"
+        : "Which detail do we know, and which claim are we checking?",
+      source,
+    );
+    add(
+      "trace-relationship",
+      q.subject === "English" ? "guided_annotation" : "diagram_first",
+      q.subject === "Science"
+        ? "Trace what changes and what stays the same in this case before making a prediction."
+        : q.subject === "English"
+          ? "Choose a short phrase from the text. Link that phrase to the inference you want to make."
+          : "Locate the place or event in the source, then trace the relationship the question asks about.",
+      q.subject === "Science"
+        ? "What changed in the situation described?"
+        : q.subject === "English"
+          ? "Which phrase connects directly to your idea?"
+          : "Which two details in the source need to be connected?",
+      source,
+    );
+  }
   if (!plans.length) {
     add(
       "task-clue",
@@ -184,8 +228,15 @@ export function selectSupportPlan(
   plans: SupportPlan[],
   used: string[],
   preferVisual = false,
+  rankedStrategies: Strategy[] = [],
 ): SupportPlan {
-  const fresh = plans.filter((p) => !used.includes(p.id));
+  const rank = (strategy: Strategy) =>
+    rankedStrategies.includes(strategy)
+      ? rankedStrategies.indexOf(strategy)
+      : rankedStrategies.length;
+  const fresh = plans
+    .filter((p) => !used.includes(p.id))
+    .sort((a, b) => rank(a.strategy) - rank(b.strategy));
   return (
     (preferVisual ? fresh.find((p) => p.visuals.length) : undefined) ??
     fresh[0] ?? {

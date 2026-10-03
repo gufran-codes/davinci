@@ -193,5 +193,5 @@ test("parent answer controls remain effective and ending clears guided state", (
   assert.equal(s.attempts, 0);
   s = f.say("Finish for today");
   assert.equal(s.teaching!.guidedPractice, undefined);
-  assert.equal(s.state, "SESSION_REVIEW");
+  assert.equal(s.state, "COMPLETE");
 });

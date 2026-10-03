@@ -653,8 +653,8 @@
   grid-template-columns: minmax(0, 1fr) 310px;
   gap: 22px;
 }
-.shell :global(.conversation-skill h1) {
-  font-size: 29px;
+.shell :global(.active-task h1.lesson-task) {
+  font-size: clamp(24px, 2.25vw, 32px);
 }
 .shell :global(.conversation-controls) {
   background: #faf8f2;
@@ -664,8 +664,8 @@
   padding: 23px;
 }
 .shell :global(.spoken-turn) {
-  font-size: 19px;
-  line-height: 1.7;
+  font-size: 18px;
+  line-height: 1.6;
 }
 .shell :global(.teaching-canvas) {
   background: #fff;
@@ -676,10 +676,10 @@
   width: 66px;
   height: 66px;
 }
-.shell :global(.choice-workspace) {
-  background: #fafaf7;
+.shell :global(.active-task .choice-workspace) {
+  background: none;
   border-color: #e5e5dc;
-  border-radius: 16px;
+  border-radius: 0;
 }
 .shell :global(.choice-workspace-heading) {
   display: block;
@@ -687,11 +687,11 @@
 .shell :global(.choice-workspace-heading p) {
   margin-top: 8px;
 }
-.shell :global(.choice-workspace-heading h2) {
-  font-size: 24px;
+.shell :global(.active-task .choice-workspace-heading h2) {
+  font-size: 14px;
 }
 .shell :global(.prominent-choices button) {
-  font-size: 19px;
+  font-size: 17px;
 }
 .shell :global(.conversation-fallback textarea) {
   background: white;
@@ -726,8 +726,11 @@
     grid-row: span 2;
   }
   .shell :global(.conversation-workspace) {
-    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr) 240px;
     gap: 15px;
+  }
+  .shell :global(.active-task) {
+    padding: 24px;
   }
   .shell :global(.conversation-layout) {
     padding: 20px;
@@ -739,7 +742,7 @@
   }
   .shell :global(.conversation-controls) {
     position: static;
-    order: -1;
+    order: 0;
   }
   .shell :global(.conversation-controls .voice-guidance) {
     margin-bottom: 12px;

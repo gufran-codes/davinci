@@ -79,6 +79,7 @@ export function rubricFor(q: Question): Rubric {
   const c = contentById[q.conceptId];
   if (c) {
     const rubric = structuredClone(c.rubric);
+    rubric.sampleExplanation = q.explanation;
     if (q.responseType === "writing")
       rubric.criteria[0].terms = /garden/.test(q.prompt)
         ? ["garden", "plant", "grow"]
@@ -196,11 +197,16 @@ export function materialFor(q: Question, example: Question): TeachingMaterial {
           ? "Look at what you can observe, and what changed."
           : "Look at the evidence, labels, and order of events.";
   const glossary = {
-    denominator: "The denominator tells how many equal parts make one whole.",
-    numerator: "The numerator counts the parts we are talking about.",
-    equivalent:
-      "Equivalent means the same amount, even if the names look different.",
-    fraction: "A fraction names equal parts of a whole.",
+    ...(fraction
+      ? {
+          denominator:
+            "The denominator tells how many equal parts make one whole.",
+          numerator: "The numerator counts the parts we are talking about.",
+          equivalent:
+            "Equivalent means the same amount, even if the names look different.",
+          fraction: "A fraction names equal parts of a whole.",
+        }
+      : {}),
     ...c?.glossary,
   };
   return {

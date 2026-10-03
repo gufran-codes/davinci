@@ -15563,41 +15563,68 @@
       }
     ],
     "status": "draft",
-    "provenance": "AI-authored baseline; deterministic validation is not human curriculum review.",
+    "provenance": "AI-authored baseline; deterministic validation is not human curriculum review. Task revision: original Da Vinci evidence scenarios and plausible diagnostic choices; educator review pending.",
     "reviewer": null,
     "questions": [
       {
         "role": "diagnostic",
-        "prompt": "Can matter be present as a gas even when you cannot see it?",
-        "answer": "yes",
-        "explanation": "Air is matter and takes up space.",
-        "context": "Air is matter and takes up space.",
-        "hint": "Think about matter and its properties. Air is matter and takes up space.",
-        "visuals": []
-      },
-      {
-        "role": "practice",
-        "prompt": "Consider this explanation: Air is matter and takes up space. What key idea does it support? Can matter be present as a gas even when you cannot see it?",
-        "answer": "yes",
-        "explanation": "Air is matter and takes up space.",
-        "context": "Air is matter and takes up space.",
-        "hint": "Think about matter and its properties. Air is matter and takes up space.",
+        "prompt": "A child holds an empty-looking cup upside down and pushes it straight into water. A dry tissue at the bottom stays dry.\nWhich explanation best fits this observation?",
+        "answer": "Air in the cup takes up space",
+        "choices": [
+          "The cup has no matter inside",
+          "Air in the cup takes up space",
+          "The tissue turns the water into a solid"
+        ],
+        "hint": "Consider what might be inside a cup even when you cannot see it.",
+        "explanation": "The trapped air occupies space and prevents water from reaching the tissue.",
+        "context": "A child holds an empty-looking cup upside down and pushes it straight into water. A dry tissue at the bottom stays dry.",
         "visuals": [
           {
             "type": "passage",
-            "text": "Air is matter and takes up space.",
+            "text": "A child holds an empty-looking cup upside down and pushes it straight into water. A dry tissue at the bottom stays dry.",
+            "highlights": []
+          }
+        ]
+      },
+      {
+        "role": "practice",
+        "prompt": "A balloon is flat before air is pumped in. After pumping, the balloon is larger and contains no liquid or solid pieces.\nWhat does this change show?",
+        "answer": "A gas can take up space",
+        "choices": [
+          "A gas can take up space",
+          "Only solids can make a container larger",
+          "The pump adds a liquid that cannot be seen"
+        ],
+        "hint": "Compare the balloon before and after air was added.",
+        "explanation": "Adding air makes the balloon expand, showing that the gas occupies space.",
+        "context": "A balloon is flat before air is pumped in. After pumping, the balloon is larger and contains no liquid or solid pieces.",
+        "visuals": [
+          {
+            "type": "passage",
+            "text": "A balloon is flat before air is pumped in. After pumping, the balloon is larger and contains no liquid or solid pieces.",
             "highlights": []
           }
         ]
       },
       {
         "role": "mastery",
-        "prompt": "A classmate asks: Can matter be present as a gas even when you cannot see it? Give your answer and a reason.",
-        "answer": "yes",
-        "explanation": "Air is matter and takes up space.",
-        "context": "Air is matter and takes up space.",
-        "hint": "Think about matter and its properties. Air is matter and takes up space.",
-        "visuals": []
+        "prompt": "A syringe opening is sealed. Pushing its plunger compresses the trapped air, but the plunger does not reach the end.\nWhich claim is supported?",
+        "answer": "The trapped air still occupies space",
+        "choices": [
+          "The air disappears when squeezed",
+          "The air changes into a solid",
+          "The trapped air still occupies space"
+        ],
+        "hint": "Distinguish compressing a substance from making it disappear.",
+        "explanation": "Air can be compressed, but it remains matter occupying space.",
+        "context": "A syringe opening is sealed. Pushing its plunger compresses the trapped air, but the plunger does not reach the end.",
+        "visuals": [
+          {
+            "type": "passage",
+            "text": "A syringe opening is sealed. Pushing its plunger compresses the trapped air, but the plunger does not reach the end.",
+            "highlights": []
+          }
+        ]
       }
     ],
     "rubric": {
@@ -15605,7 +15632,7 @@
         {
           "id": "concept",
           "description": "Air is matter and takes up space.",
-          "terms": ["yes", "matter", "space"],
+          "terms": ["air", "space", "trapped", "gas", "compress", "occupies"],
           "weight": 1
         },
         {
@@ -15628,7 +15655,8 @@
     },
     "glossary": {
       "matter and its properties": "Air is matter and takes up space."
-    }
+    },
+    "curriculumVersion": "primary-task-revision-2026-10"
   },
   {
     "id": "g5_science_matter",
@@ -18660,41 +18688,72 @@
       }
     ],
     "status": "draft",
-    "provenance": "AI-authored baseline; deterministic validation is not human curriculum review.",
+    "provenance": "AI-authored baseline; deterministic validation is not human curriculum review. Task revision: original Da Vinci evidence scenarios and plausible diagnostic choices; educator review pending.",
     "reviewer": null,
     "questions": [
       {
         "role": "diagnostic",
-        "prompt": "Should measurements be recorded even when they differ from a prediction?",
-        "answer": "yes",
-        "explanation": "Evidence should be recorded honestly.",
-        "context": "Evidence should be recorded honestly.",
-        "hint": "Think about observing, predicting and testing. Evidence should be recorded honestly.",
-        "visuals": []
-      },
-      {
-        "role": "practice",
-        "prompt": "Consider this explanation: Evidence should be recorded honestly. What key idea does it support? Should measurements be recorded even when they differ from a prediction?",
-        "answer": "yes",
-        "explanation": "Evidence should be recorded honestly.",
-        "context": "Evidence should be recorded honestly.",
-        "hint": "Think about observing, predicting and testing. Evidence should be recorded honestly.",
+        "prompt": "Sam predicts a toy car will travel 50 cm. The measured distance is 38 cm.\nWhat should Sam write in the results table?",
+        "answer": "The measured distance of 38 cm",
+        "choices": [
+          "The predicted distance of 50 cm",
+          "The measured distance of 38 cm",
+          "The average of the prediction and measurement"
+        ],
+        "hint": "A prediction and a measurement have different jobs in an investigation.",
+        "explanation": "Recording the measurement preserves the evidence, even when the prediction was different.",
+        "context": "Sam predicts a toy car will travel 50 cm. The measured distance is 38 cm.",
         "visuals": [
           {
             "type": "passage",
-            "text": "Evidence should be recorded honestly.",
+            "text": "Sam predicts a toy car will travel 50 cm. The measured distance is 38 cm.",
             "highlights": []
           }
         ]
       },
       {
+        "role": "practice",
+        "prompt": "Three trials give distances of 38 cm, 40 cm, and 39 cm. The prediction was 50 cm.\nWhat is the best next step?",
+        "answer": "Keep all three measurements and compare them with the prediction",
+        "choices": [
+          "Keep all three measurements and compare them with the prediction",
+          "Replace the measurements with 50 cm",
+          "Keep only the largest measurement"
+        ],
+        "hint": "Consider which record would let another student check what actually happened.",
+        "explanation": "All three measurements are evidence. Comparing them with the prediction helps revise the explanation.",
+        "context": "Three trials give distances of 38 cm, 40 cm, and 39 cm. The prediction was 50 cm.",
+        "visuals": [
+          {
+            "type": "table",
+            "headers": ["Trial", "Distance"],
+            "rows": [
+              ["1", "38 cm"],
+              ["2", "40 cm"],
+              ["3", "39 cm"]
+            ]
+          }
+        ]
+      },
+      {
         "role": "mastery",
-        "prompt": "A classmate asks: Should measurements be recorded even when they differ from a prediction? Give your answer and a reason.",
-        "answer": "yes",
-        "explanation": "Evidence should be recorded honestly.",
-        "context": "Evidence should be recorded honestly.",
-        "hint": "Think about observing, predicting and testing. Evidence should be recorded honestly.",
-        "visuals": []
+        "prompt": "Two groups test the same ramp. Their measured distances differ slightly.\nHow should the class investigate the difference?",
+        "answer": "Record both sets and compare how the tests were carried out",
+        "choices": [
+          "Erase the smaller results",
+          "Change both tables to the same number",
+          "Record both sets and compare how the tests were carried out"
+        ],
+        "hint": "Think about how keeping records helps us check a possible source of difference.",
+        "explanation": "Keeping both sets of results allows the class to compare methods and repeat the test.",
+        "context": "Two groups test the same ramp. Their measured distances differ slightly.",
+        "visuals": [
+          {
+            "type": "passage",
+            "text": "Two groups test the same ramp. Their measured distances differ slightly.",
+            "highlights": []
+          }
+        ]
       }
     ],
     "rubric": {
@@ -18702,7 +18761,14 @@
         {
           "id": "concept",
           "description": "Evidence should be recorded honestly.",
-          "terms": ["yes", "evidence", "should", "recorded", "honestly"],
+          "terms": [
+            "measurement",
+            "measured",
+            "record",
+            "results",
+            "prediction",
+            "trial"
+          ],
           "weight": 1
         },
         {
@@ -18725,7 +18791,8 @@
     },
     "glossary": {
       "observing, predicting and testing": "Evidence should be recorded honestly."
-    }
+    },
+    "curriculumVersion": "primary-task-revision-2026-10"
   },
   {
     "id": "g5_science_investigation",
@@ -19173,41 +19240,62 @@
       }
     ],
     "status": "draft",
-    "provenance": "AI-authored baseline; deterministic validation is not human curriculum review.",
+    "provenance": "AI-authored baseline; deterministic validation is not human curriculum review. Task revision: original Da Vinci evidence scenarios and plausible diagnostic choices; educator review pending.",
     "reviewer": null,
     "questions": [
       {
         "role": "diagnostic",
-        "prompt": "A map scale is 1 cm to 2 km. Two centimetres represents how many kilometres?",
+        "prompt": "A map scale says 1 cm represents 2 km. The park and school are 2 cm apart on the map.\nHow far apart are they in real life?",
         "answer": "4",
-        "explanation": "Multiply two map centimetres by two kilometres per centimetre.",
-        "context": "Multiply two map centimetres by two kilometres per centimetre.",
-        "hint": "Think about maps and location. Multiply two map centimetres by two kilometres per centimetre.",
-        "visuals": []
+        "choices": ["2", "4", "1"],
+        "hint": "Each centimetre represents the same real distance. Count two of those units.",
+        "explanation": "Two map centimetres each represent two kilometres, so the real distance is four kilometres.",
+        "context": "A map scale says 1 cm represents 2 km. The park and school are 2 cm apart on the map.",
+        "visuals": [
+          {
+            "type": "table",
+            "headers": ["Map distance", "Real distance"],
+            "rows": [
+              ["1 cm", "2 km"],
+              ["2 cm", "? km"]
+            ]
+          }
+        ]
       },
       {
         "role": "practice",
-        "prompt": "Consider this explanation: Multiply two map centimetres by two kilometres per centimetre. What key idea does it support? A map scale is 1 cm to 2 km. Two centimetres represents how many kilometres?",
-        "answer": "4",
-        "explanation": "Multiply two map centimetres by two kilometres per centimetre.",
-        "context": "Multiply two map centimetres by two kilometres per centimetre.",
-        "hint": "Think about maps and location. Multiply two map centimetres by two kilometres per centimetre.",
+        "prompt": "On a different map, 1 cm represents 3 km. The museum and station are 4 cm apart.\nHow many kilometres does that represent?",
+        "answer": "12",
+        "choices": ["12", "7", "4"],
+        "hint": "Use the scale once for each of the four map centimetres.",
+        "explanation": "Four groups of three kilometres make twelve kilometres.",
+        "context": "On a different map, 1 cm represents 3 km. The museum and station are 4 cm apart.",
         "visuals": [
           {
-            "type": "passage",
-            "text": "Multiply two map centimetres by two kilometres per centimetre.",
-            "highlights": []
+            "type": "table",
+            "headers": ["Map distance", "Real distance"],
+            "rows": [
+              ["1 cm", "3 km"],
+              ["4 cm", "? km"]
+            ]
           }
         ]
       },
       {
         "role": "mastery",
-        "prompt": "A classmate asks: A map scale is 1 cm to 2 km. Two centimetres represents how many kilometres? Give your answer and a reason.",
-        "answer": "4",
-        "explanation": "Multiply two map centimetres by two kilometres per centimetre.",
-        "context": "Multiply two map centimetres by two kilometres per centimetre.",
-        "hint": "Think about maps and location. Multiply two map centimetres by two kilometres per centimetre.",
-        "visuals": []
+        "prompt": "A trail is 15 km long. On a map, 1 cm represents 5 km.\nHow many centimetres long is the trail on the map?",
+        "answer": "3",
+        "choices": ["10", "75", "3"],
+        "hint": "Think about how many five-kilometre units fit into fifteen kilometres.",
+        "explanation": "Three five-kilometre units fit into fifteen, so the trail measures three centimetres on the map.",
+        "context": "A trail is 15 km long. On a map, 1 cm represents 5 km.",
+        "visuals": [
+          {
+            "type": "passage",
+            "text": "A trail is 15 km long. On a map, 1 cm represents 5 km.",
+            "highlights": []
+          }
+        ]
       }
     ],
     "rubric": {
@@ -19215,7 +19303,15 @@
         {
           "id": "concept",
           "description": "Multiply two map centimetres by two kilometres per centimetre.",
-          "terms": ["4", "multiply", "centimetres", "kilometres", "centimetre"],
+          "terms": [
+            "scale",
+            "centimetre",
+            "centimeter",
+            "kilometre",
+            "kilometer",
+            "groups",
+            "units"
+          ],
           "weight": 1
         },
         {
@@ -19238,7 +19334,8 @@
     },
     "glossary": {
       "maps and location": "Multiply two map centimetres by two kilometres per centimetre."
-    }
+    },
+    "curriculumVersion": "primary-task-revision-2026-10"
   },
   {
     "id": "g5_social_studies_maps",
@@ -22279,41 +22376,68 @@
       }
     ],
     "status": "draft",
-    "provenance": "AI-authored baseline; deterministic validation is not human curriculum review.",
+    "provenance": "AI-authored baseline; deterministic validation is not human curriculum review. Task revision: original Da Vinci evidence scenarios and plausible diagnostic choices; educator review pending.",
     "reviewer": null,
     "questions": [
       {
         "role": "diagnostic",
-        "prompt": "Should historians compare more than one source?",
-        "answer": "yes",
-        "explanation": "Comparing sources can corroborate or challenge a claim.",
-        "context": "Comparing sources can corroborate or challenge a claim.",
-        "hint": "Think about sources and historical evidence. Comparing sources can corroborate or challenge a claim.",
-        "visuals": []
-      },
-      {
-        "role": "practice",
-        "prompt": "Consider this explanation: Comparing sources can corroborate or challenge a claim. What key idea does it support? Should historians compare more than one source?",
-        "answer": "yes",
-        "explanation": "Comparing sources can corroborate or challenge a claim.",
-        "context": "Comparing sources can corroborate or challenge a claim.",
-        "hint": "Think about sources and historical evidence. Comparing sources can corroborate or challenge a claim.",
+        "prompt": "In a fictional town, a diary says a bridge opened in 1920. A council record says the bridge opened in 1922.\nWhat should a historian do next?",
+        "answer": "Compare when and why each source was created and check another record",
+        "choices": [
+          "Accept the diary because it sounds personal",
+          "Compare when and why each source was created and check another record",
+          "Accept the council record without checking it"
+        ],
+        "hint": "The sources disagree. Think about what information could help evaluate both.",
+        "explanation": "Checking the sources and looking for corroborating evidence is stronger than assuming either source is correct.",
+        "context": "In a fictional town, a diary says a bridge opened in 1920. A council record says the bridge opened in 1922.",
         "visuals": [
           {
             "type": "passage",
-            "text": "Comparing sources can corroborate or challenge a claim.",
+            "text": "In a fictional town, a diary says a bridge opened in 1920. A council record says the bridge opened in 1922.",
+            "highlights": []
+          }
+        ]
+      },
+      {
+        "role": "practice",
+        "prompt": "A fictional newspaper reports that a town market moved in 1950. A dated photograph shows stalls at the new site in 1951.\nWhich claim do both sources support?",
+        "answer": "The new site was in use by 1951",
+        "choices": [
+          "The new site was in use by 1951",
+          "The market moved exactly on the day of the photograph",
+          "Every trader preferred the new site"
+        ],
+        "hint": "Separate what the sources show from what they do not tell us.",
+        "explanation": "The report and photograph support use of the new site by 1951, but do not establish the exact moving day or everyone\u2019s opinion.",
+        "context": "A fictional newspaper reports that a town market moved in 1950. A dated photograph shows stalls at the new site in 1951.",
+        "visuals": [
+          {
+            "type": "passage",
+            "text": "A fictional newspaper reports that a town market moved in 1950. A dated photograph shows stalls at the new site in 1951.",
             "highlights": []
           }
         ]
       },
       {
         "role": "mastery",
-        "prompt": "A classmate asks: Should historians compare more than one source? Give your answer and a reason.",
-        "answer": "yes",
-        "explanation": "Comparing sources can corroborate or challenge a claim.",
-        "context": "Comparing sources can corroborate or challenge a claim.",
-        "hint": "Think about sources and historical evidence. Comparing sources can corroborate or challenge a claim.",
-        "visuals": []
+        "prompt": "Two later articles repeat the same sentence about a fictional school opening. Both cite one original newspaper report.\nDo these provide two independent confirmations?",
+        "answer": "No; both rely on the same original report",
+        "choices": [
+          "Yes; two articles always mean two independent sources",
+          "No; newspapers can never be useful sources",
+          "No; both rely on the same original report"
+        ],
+        "hint": "Trace where each article got its information.",
+        "explanation": "Repeating one report does not supply independent corroboration; another independent source would strengthen the claim.",
+        "context": "Two later articles repeat the same sentence about a fictional school opening. Both cite one original newspaper report.",
+        "visuals": [
+          {
+            "type": "passage",
+            "text": "Two later articles repeat the same sentence about a fictional school opening. Both cite one original newspaper report.",
+            "highlights": []
+          }
+        ]
       }
     ],
     "rubric": {
@@ -22322,12 +22446,13 @@
           "id": "concept",
           "description": "Comparing sources can corroborate or challenge a claim.",
           "terms": [
-            "yes",
-            "comparing",
-            "sources",
-            "corroborate",
-            "challenge",
-            "claim"
+            "source",
+            "record",
+            "diary",
+            "photograph",
+            "report",
+            "independent",
+            "corroboration"
           ],
           "weight": 1
         },
@@ -22351,7 +22476,8 @@
     },
     "glossary": {
       "sources and historical evidence": "Comparing sources can corroborate or challenge a claim."
-    }
+    },
+    "curriculumVersion": "primary-task-revision-2026-10"
   },
   {
     "id": "g5_social_studies_sources",

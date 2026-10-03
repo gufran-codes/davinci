@@ -64,5 +64,5 @@ test("guided teaching keeps the active step on the canvas across reloads", async
   await expect(
     page.getByRole("heading", { name: "Which choice fits best?" }),
   ).toBeVisible();
-  await expect(page.getByRole("radio", { name: /B 2\/4/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /B 2\/4/ })).toBeVisible();
 });

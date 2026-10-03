@@ -195,6 +195,16 @@ export function applySupport(
   const supportKey = s.question.assessmentKey ?? s.question.prompt;
   if (m.usedSupportPlans?.questionId !== supportKey)
     m.usedSupportPlans = { questionId: supportKey, ids: [] };
+  const ranked = rankStrategies({
+    learner: l,
+    subject: concept.subject,
+    domain: concept.domain,
+    current: previous,
+    signals,
+    question: s.question,
+    mastery: l.states[concept.id]?.masteryScore ?? 0.25,
+    age: child.age,
+  });
   const plan = selectSupportPlan(
     supportPlans(
       s.question,
@@ -209,9 +219,12 @@ export function applySupport(
     ),
     m.usedSupportPlans.ids,
     kind === "show",
+    ranked.map((strategy) => strategy.id),
   );
-  m.usedSupportPlans.ids = [...m.usedSupportPlans.ids, plan.id].slice(-12);
-  m.supportPlan = { ...plan, questionId: s.question.id };
+  if (kind !== "hint") {
+    m.usedSupportPlans.ids = [...m.usedSupportPlans.ids, plan.id].slice(-12);
+    m.supportPlan = { ...plan, questionId: s.question.id };
+  } else m.supportPlan = undefined;
   if (kind === "hint") {
     m.hintLevel = Math.min(7, m.hintLevel + 1);
     signals.hintCount++;
@@ -299,16 +312,6 @@ export function applySupport(
       descended: true,
       reason: s.decision.reason,
     };
-  const ranked = rankStrategies({
-    learner: l,
-    subject: concept.subject,
-    domain: concept.domain,
-    current: previous,
-    signals,
-    question: s.question,
-    mastery: l.states[concept.id]?.masteryScore ?? 0.25,
-    age: child.age,
-  });
   const selected = ranked.find((x) => x.id === plan.strategy);
   s.decision.strategy = plan.strategy;
   s.decision.strategyId = s.decision.strategy;

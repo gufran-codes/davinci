@@ -51,20 +51,40 @@ export const skillContentSchema = z.object({
   reviewer: z.string().nullable(),
   questions: z
     .array(
-      z.object({
-        role: z.enum(["diagnostic", "practice", "mastery"]),
-        responseType: z.enum(["short", "writing"]).optional(),
-        misconception: z
-          .object({ id: z.string(), answer: z.string() })
-          .optional(),
-        prompt: z.string().min(8),
-        answer: z.string().min(1),
-        choices: z.array(z.string()).optional(),
-        explanation: z.string(),
-        context: z.string(),
-        hint: z.string(),
-        visuals: z.array(z.record(z.string(), z.unknown())).default([]),
-      }),
+      z
+        .object({
+          role: z.enum(["diagnostic", "practice", "mastery"]),
+          responseType: z.enum(["short", "writing"]).optional(),
+          misconception: z
+            .object({ id: z.string(), answer: z.string() })
+            .optional(),
+          prompt: z.string().min(8),
+           
+          answer: z.string().min(1),
+          choices: z.array(z.string().trim().min(1)).min(2).max(6).optional(),
+          explanation: z.string(),
+          context: z.string(),
+          hint: z.string(),
+          visuals: z.array(z.record(z.string(), z.unknown())).default([]),
+        })
+        .superRefine((question, context) => {
+          if (!question.choices) return;
+          const choices = question.choices.map((choice) =>
+            choice.toLowerCase(),
+          );
+          if (new Set(choices).size !== choices.length)
+            context.addIssue({
+              code: "custom",
+              path: ["choices"],
+              message: "Choices must be distinct.",
+            });
+          if (!question.choices.includes(question.answer))
+            context.addIssue({
+              code: "custom",
+              path: ["answer"],
+              message: "The answer must match exactly one available choice.",
+            });
+        }),
     )
     .min(3),
   rubric: rubricSchema,

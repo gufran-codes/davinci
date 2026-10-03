@@ -1,6 +1,6 @@
 import { boardFor } from "./whiteboard";
 import { answerAccess } from "./learning-controls";
-import { materialFor, contentById } from "../lib/teaching/content";
+import { materialFor, contentById, rubricFor } from "../lib/teaching/content";
 import { getQuestion } from "../lib/curriculum";
 import { memoryFor, spokenTeaching } from "../lib/teaching/adaptive";
 import OpenAI from "openai";
@@ -22,6 +22,7 @@ import {
 } from "../lib/teaching/session-intelligence";
 import { tutorSpeechProfile } from "../lib/teaching/speech";
 import { dialogueFocus } from "../lib/conversation/dialogue";
+import { taskSnapshot, responsePlan } from "../lib/conversation/grounding";
 const Output = z.object({
   message: z.string().max(300),
   pedagogicalIntent: z.string().max(160),
@@ -51,11 +52,34 @@ export function buildTeachingState(
   const concept = conceptById[session.question.conceptId];
   const state = learner.states[session.question.conceptId];
   const memory = memoryFor(session);
+  const related = new Set([concept.id, session.plan.targetConcept]);
+  const visit = (id: string) => {
+    for (const prerequisite of conceptById[id]?.prerequisites ?? []) {
+      if (!related.has(prerequisite)) {
+        related.add(prerequisite);
+        visit(prerequisite);
+      }
+    }
+  };
+  visit(concept.id);
+  // Multiplication is an instructional bridge to equivalence, even where the
+  // curriculum graph only lists fraction meaning as a formal prerequisite.
+  if (
+    concept.subject === "Math" &&
+    /fraction|division|ratio/i.test(`${concept.domain} ${concept.id}`)
+  )
+    for (const strength of strengthsFor(learner, "Math"))
+      if (/multiplication|equal_groups/.test(strength.skillId))
+        related.add(strength.skillId);
+  if (session.decision.strengthToLeverage)
+    related.add(session.decision.strengthToLeverage);
+  const board = boardFor(session.id);
   const relevantMisconceptions = learner.misconceptions
     .filter(
       (item) =>
-        concept?.misconceptionIds.includes(item.id) ||
-        item.status === "confirmed",
+        [...related].some((id) =>
+          conceptById[id]?.misconceptionIds.includes(item.id),
+        ) && item.status !== "resolved",
     )
     .slice(0, 8);
   const relevantStrategies = learner.strategies
@@ -73,12 +97,14 @@ export function buildTeachingState(
     targetSkill: session.question.conceptId,
     mastery: state?.masteryScore ?? 0.25,
     strengths: strengthsFor(learner)
+      .filter((s) => related.has(s.skillId))
       .slice(0, 6)
       .map((s) => ({
         skill: s.skillId,
         confidence: s.strengthConfidence,
       })),
     weaknesses: weaknessesFor(learner)
+      .filter((w) => related.has(w.skillId))
       .slice(0, 6)
       .map((w) => w.skillId),
     prerequisites: (concept?.prerequisites ?? []).map((skill) => ({
@@ -119,13 +145,23 @@ export function buildTeachingState(
       memory.pendingIndependentCheck || memory.activeIndependentCheck,
     ),
     wordShare: memory.wordShare,
-    recentLearning: learner.recentLearning.slice(0, 8).map((entry) => ({
-      skillId: entry.skillId,
-      kind: entry.kind,
-      summary: entry.summary,
-      createdAt: entry.createdAt,
-    })),
+    recentLearning: learner.recentLearning
+      .filter((entry) => related.has(entry.skillId))
+      .slice(0, 8)
+      .map((entry) => ({
+        skillId: entry.skillId,
+        kind: entry.kind,
+        summary: entry.summary,
+        createdAt: entry.createdAt,
+      })),
     academicContext: {
+      activeTask: taskSnapshot(session),
+      studentInputTask: memory.lastTurnTrace?.inputTask,
+      interpretedUtterance: memory.lastTurnTrace?.interpretation,
+      responsePlan: responsePlan(session),
+      recentTutorTurns: (memory.recentTutorTurns ?? [])
+        .filter((t) => t.turnId !== session.conversation?.turnId)
+        .slice(-4),
       dialogueFocus: dialogueFocus(session),
       domain: concept.domain,
       topic: concept.topic,
@@ -134,6 +170,8 @@ export function buildTeachingState(
       gradeExpectation: concept.gradeBand,
       question: session.question.prompt,
       expectedAnswer: session.question.answer,
+      rubric: rubricFor(session.question),
+      choices: session.question.choices ?? [],
       acceptableAnswers: session.question.acceptableAnswers ?? [
         session.question.answer,
       ],
@@ -149,8 +187,11 @@ export function buildTeachingState(
       recentTutorQuestions: memory.recentTutorQuestions,
       workingMemory: compactWorkingMemory(session),
       hintHistory: memory.hintHistory.slice(-8),
-      studentBoard: boardFor(session.id)
-        .objects.slice(-20)
+      taskVisuals: session.question.visuals,
+      canvasActions: session.conversation?.canvasActions ?? [],
+      studentBoardRevision: board.revision,
+      studentBoard: board.objects
+        .slice(-20)
         .map(({ id, kind, text, x, y }) => ({ id, kind, text, x, y })),
       whiteboard:
         session.conversation?.cues
@@ -290,6 +331,10 @@ export async function publicSession(
     const teaching = spokenTeaching(s);
     content = { ...content, message: teaching.message, ui: teaching.visuals };
   }
+  const debugContext =
+    process.env.NODE_ENV === "development"
+      ? buildTeachingState(s, learner, student)
+      : undefined;
   return {
     answerAccess: answerAccess(s),
     conversation: s.conversation,
@@ -319,6 +364,20 @@ export async function publicSession(
     teachingDebug:
       process.env.NODE_ENV === "development"
         ? {
+            activeTask: taskSnapshot(s),
+            lastTurn: memory.lastTurnTrace ?? null,
+            learnerContext: debugContext
+              ? {
+                  mastery: debugContext.mastery,
+                  strengths: debugContext.strengths,
+                  weaknesses: debugContext.weaknesses,
+                  prerequisites: debugContext.prerequisites,
+                  misconceptions: debugContext.misconceptions,
+                  strategyEvidence: debugContext.strategyEvidence,
+                }
+              : null,
+            decision: s.decision,
+            finalSpeech: s.conversation?.spokenText ?? null,
             goal: memory.goal,
             guidedPractice: memory.guidedPractice ?? null,
             workingMemory: sessionIntelligence(s),

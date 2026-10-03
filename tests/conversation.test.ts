@@ -177,9 +177,9 @@ test("spoken language exposes the selected teaching strategy without overriding 
 
 test("review can return to teaching with a different visible approach", () => {
   const f = setup();
-  let s = f.say("Finish for today");
-  assert.equal(s.state, "SESSION_REVIEW");
-  assert.ok(s.conversation?.cues.some((cue) => cue.visuals.length));
+  let s = f.session;
+  s.state = "SESSION_REVIEW";
+  saveSession(s);
   s = f.say("Show me another way");
   assert.equal(s.state, "TEACH");
   assert.doesNotMatch(s.conversation!.text, /How did that feel/);
@@ -736,12 +736,163 @@ test("finishing and returning persist real teaching outcomes", () => {
   f.say("I need a hint");
   let s = f.say(f.session.question.answer);
   s = f.say("Finish for today");
-  assert.equal(s.state, "SESSION_REVIEW");
-  s = f.say("A little clearer");
   assert.equal(s.state, "COMPLETE");
+  assert.equal(s.reflection, undefined);
   assert.ok(s.completedAt);
   assert.ok(s.summary);
   const l = learnerFor(f.child.id);
   assert.ok(l.strategies.some((e) => e.successfulOutcomes > 0));
   assert.ok(l.states.equivalent_fractions.assistedAttempts > 0);
+});
+
+test("natural end-session commands finalize once without interpreting or generating more teaching", async () => {
+  for (const phrase of [
+    "Finish the session.",
+    "I’m done.",
+    "End the lesson.",
+    "Can we stop now?",
+    "Let's wrap up",
+    "I want to stop for today",
+    "Goodbye.",
+  ]) {
+    const f = setup();
+    const before = JSON.stringify(learnerFor(f.child.id).states);
+    assert.equal(
+      understandLocally(phrase, f.session.question).intent,
+      "end_session",
+    );
+    const input = {
+      requestId: randomUUID(),
+      version: f.session.version,
+      transcript: phrase,
+      source: "voice" as const,
+    };
+    let calls = 0;
+    const next = await conversationTurn(
+      f.child,
+      f.session.id,
+      input,
+      {
+        async understand() {
+          calls++;
+          return { intent: "answer", answer: "invented" };
+        },
+      },
+      {
+        async render() {
+          calls++;
+          return "Keep teaching.";
+        },
+      },
+    );
+    assert.equal(calls, 0);
+    assert.equal(next.state, "COMPLETE");
+    assert.ok(next.summary);
+    assert.ok(next.completedAt);
+    assert.equal(next.reflection, undefined);
+    assert.equal(next.conversation!.intent, "end_session");
+    assert.equal(next.conversation!.canAnswer, false);
+    assert.equal(next.conversation!.canvasActions?.length, 0);
+    assert.equal(JSON.stringify(learnerFor(f.child.id).states), before);
+    const duplicate = await conversationTurn(f.child, next.id, {
+      ...input,
+      requestId: randomUUID(),
+    });
+    assert.equal(duplicate.version, next.version);
+    assert.equal(duplicate.completedAt, next.completedAt);
+    assert.equal(
+      all<{ type: string }>(
+        "SELECT type FROM session_events WHERE session_id=? AND type='session_completed'",
+        next.id,
+      ).length,
+      1,
+    );
+  }
+  const f = setup();
+  for (const phrase of [
+    "Stop",
+    "I'm done with the first step",
+    "Don't end the lesson",
+    "I finished my answer",
+    "What happened at the end of the story?",
+  ]) {
+    assert.notEqual(
+      understandLocally(phrase, f.session.question).intent,
+      "end_session",
+    );
+  }
+});
+
+test("ending wins a race with a delayed answer and never resurrects the lesson", async () => {
+  const f = setup("g4_science_matter");
+  const s = f.session;
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const delayed = conversationTurn(
+    f.child,
+    s.id,
+    {
+      requestId: randomUUID(),
+      version: s.version,
+      transcript: "Perhaps it has air",
+      source: "voice",
+    },
+    {
+      async understand() {
+        await waiting;
+        return { intent: "answer", answer: s.question.answer };
+      },
+    },
+  );
+  const ended = f.say("I'm done");
+  release();
+  const result = await delayed;
+  assert.equal(result.state, "COMPLETE");
+  assert.equal(result.version, ended.version);
+  assert.equal(result.attempts, ended.attempts);
+  assert.equal(result.completedAt, ended.completedAt);
+});
+
+test("review and confidence do not leak generic reflection questions into academic turns", () => {
+  for (const skill of [
+    "equivalent_fractions",
+    "g4_science_matter",
+    "g4_social_studies_sources",
+  ]) {
+    const f = setup(skill);
+    const s = f.session;
+    s.state = "SESSION_REVIEW";
+    s.feedback = null;
+    saveSession(s);
+    const next = f.say(`My answer is ${s.question.answer}`);
+    assert.equal(next.attempts, s.attempts + 1);
+    assert.doesNotMatch(
+      next.conversation!.spokenText!,
+      /Tell me how it felt|Which fact, label, or event/i,
+    );
+    assert.equal(next.conversation!.assessment?.answer, s.question.answer);
+    assert.equal(next.conversation!.assessment?.correct, true);
+    const supported = f.say("Still tricky");
+    assert.notEqual(supported.state, "COMPLETE");
+    assert.doesNotMatch(
+      supported.conversation!.spokenText!,
+      /Tell me how it felt|Which fact, label, or event/i,
+    );
+  }
+});
+
+test("reflection can finish a natural review without an academic follow-up", () => {
+  const f = setup();
+  const s = f.session;
+  s.state = "SESSION_REVIEW";
+  saveSession(s);
+  const next = f.say("Still tricky");
+  assert.equal(next.state, "COMPLETE");
+  assert.equal(next.reflection, "Still tricky");
+  assert.doesNotMatch(
+    next.conversation!.spokenText!,
+    /Which fact|What quantity|helps you decide/i,
+  );
 });

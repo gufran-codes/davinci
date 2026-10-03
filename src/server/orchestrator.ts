@@ -177,6 +177,67 @@ export function startSession(
     return s;
   });
 }
+/** One transaction owns completion for reflection, voice, and the Finish button. */
+export function finalizeSession(
+  child: Child,
+  id: string,
+  reflection?: string,
+): LearningSession {
+  return transaction(() => {
+    const s = sessionById(id);
+    if (s.childId !== child.id) throw new HttpError(404, "Lesson not found.");
+    if (s.state === "COMPLETE") return s;
+    const wasReview = s.state === "SESSION_REVIEW";
+    const learner = learnerFor(child.id);
+    if (s.learningPreferences) child = { ...child, ...s.learningPreferences };
+    s.version++;
+    const memory = memoryFor(s);
+    memory.paused = true;
+    memory.checkpoint = undefined;
+    memory.guidedPractice = undefined;
+    s.reflection = reflection;
+    s.state = "COMPLETE";
+    s.completedAt = now();
+    s.summary = summary(child, s, learner);
+    if (!s.attempts) {
+      s.summary.improved =
+        "The session ended before any answers were assessed.";
+      s.summary.developing =
+        "There is no new mastery evidence from this session yet.";
+    }
+    recordLearningMemory(
+      s,
+      "summary",
+      `${s.summary.workedOn}: ${s.summary.improved} ${s.summary.developing}`,
+      {
+        correct: s.correct,
+        attempts: s.attempts,
+        reflection: s.reflection,
+        summary: s.summary,
+      },
+    );
+    if (s.kind === "diagnostic" && wasReview)
+      run("UPDATE children SET diagnostic_complete=1 WHERE id=?", child.id);
+    saveSession(s);
+    event(s, "session_completed", {
+      correct: s.correct,
+      attempts: s.attempts,
+      reflection: s.reflection,
+    });
+    analytics.track(
+      child.parentId,
+      s.kind === "diagnostic" && wasReview
+        ? "diagnostic_completed"
+        : sessionsFor(child.id).filter(
+              (x) => x.completedAt && x.kind !== "diagnostic",
+            ).length === 1
+          ? "first_session_completed"
+          : "session_completed",
+      { childId: child.id },
+    );
+    return s;
+  });
+}
 export type SessionAction = {
   action:
     "answer" | "hint" | "another" | "continue" | "reflect" | "note" | "explain";
@@ -207,41 +268,7 @@ export function advanceSession(
     if (input.action === "reflect") {
       if (s.state !== "SESSION_REVIEW")
         throw new HttpError(409, "Finish your questions first.");
-      s.reflection = input.reflection;
-      s.state = "COMPLETE";
-      s.completedAt = now();
-      s.summary = summary(child, s, learner);
-      recordLearningMemory(
-        s,
-        "summary",
-        `${s.summary.workedOn}: ${s.summary.improved} ${s.summary.developing}`,
-        {
-          correct: s.correct,
-          attempts: s.attempts,
-          reflection: s.reflection,
-          summary: s.summary,
-        },
-      );
-      if (s.kind === "diagnostic")
-        run("UPDATE children SET diagnostic_complete=1 WHERE id=?", child.id);
-      saveSession(s);
-      event(s, "session_completed", {
-        correct: s.correct,
-        attempts: s.attempts,
-        reflection: s.reflection,
-      });
-      analytics.track(
-        child.parentId,
-        s.kind === "diagnostic"
-          ? "diagnostic_completed"
-          : sessionsFor(child.id).filter(
-                (x) => x.completedAt && x.kind !== "diagnostic",
-              ).length === 1
-            ? "first_session_completed"
-            : "session_completed",
-        { childId: child.id },
-      );
-      return s;
+      return finalizeSession(child, id, input.reflection);
     }
     if (s.state === "SESSION_REVIEW")
       throw new HttpError(409, "Choose how the lesson felt.");

@@ -7,6 +7,8 @@ import {
   type CSSProperties,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { requestsSessionEnd } from "@/lib/conversation/intent";
 import {
   Mic,
   MicOff,
@@ -29,6 +31,10 @@ import type {
   VoiceTransport,
 } from "./voice/transport";
 export function ConversationLesson({ initial }: { initial: PublicSession }) {
+  const router = useRouter();
+  const [finishing, setFinishing] = useState(false);
+  const ending = useRef(false);
+  const finishRequest = useRef<string | null>(null);
   const [session, setSession] = useState(initial),
     [status, setStatus] = useState<VoiceStatus>("idle"),
     [voice, setVoice] = useState(false),
@@ -59,19 +65,105 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
     sendRef = useRef<
       (text: string, source: "voice" | "text" | "canvas") => void
     >(() => {});
-  const apply = useCallback((next: PublicSession) => {
-    current.current = next;
-    setSession(next);
-    if (next.conversation) {
-      if (active.current) {
-        setWords(-1);
-        transport.current?.speak(next.conversation);
-      } else setWords(Number.MAX_SAFE_INTEGER);
-    }
+  const disconnect = useCallback(() => {
+    connectionEpoch.current++;
+    connecting.current = false;
+    active.current = false;
+    transport.current?.disconnect();
+    transport.current = null;
+    setVoice(false);
+    setPlaybackBlocked(false);
+    setAudioLevel(0);
+    setWords(Number.MAX_SAFE_INTEGER);
+    setStatus("idle");
   }, []);
+  const apply = useCallback(
+    (next: PublicSession) => {
+      if (
+        next.version < current.current.version ||
+        (ending.current && next.state !== "COMPLETE")
+      )
+        return;
+      current.current = next;
+      setSession(next);
+      if (next.state === "COMPLETE") {
+        ending.current = true;
+        queued.current = null;
+        disconnect();
+        router.replace(`/learn/${next.childId}/complete`);
+        return;
+      }
+      if (next.conversation) {
+        if (active.current) {
+          setWords(-1);
+          transport.current?.speak(next.conversation);
+        } else setWords(Number.MAX_SAFE_INTEGER);
+      }
+    },
+    [disconnect, router],
+  );
+  const finish = useCallback(async () => {
+    if (ending.current || current.current.state === "COMPLETE") return;
+    ending.current = true;
+    setFinishing(true);
+    setError("");
+    queued.current = null;
+    transport.current?.interrupt();
+    disconnect();
+    finishRequest.current ??= crypto.randomUUID();
+    try {
+      const response = await fetch(
+        `/api/sessions/${current.current.id}/finish`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requestId: finishRequest.current,
+            heard: heard.current,
+          }),
+          signal: AbortSignal.timeout(15000),
+        },
+      );
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error ?? "Please try again.");
+      apply(result.session);
+    } catch (e) {
+      // A response can be lost after the transaction committed. Recover first;
+      // retrying the same completion request never creates a second summary.
+      try {
+        const response = await fetch(`/api/sessions/${current.current.id}`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (response.ok) {
+          const result = await response.json();
+          if (result.session.state === "COMPLETE") {
+            apply(result.session);
+            return;
+          }
+        }
+      } catch {
+        /* Keep the saved lesson available for an explicit retry. */
+      }
+      ending.current = false;
+      setError(
+        `Your lesson could not finish: ${(e as Error).message} Please try Finish session again.`,
+      );
+    } finally {
+      setFinishing(false);
+    }
+  }, [apply, disconnect]);
   const send = useCallback(
     async (text: string, source: "voice" | "text" | "canvas") => {
-      if (!text.trim()) return;
+      if (
+        !text.trim() ||
+        ending.current ||
+        current.current.state === "COMPLETE"
+      )
+        return;
+      if (requestsSessionEnd(text)) {
+        await finish();
+        return;
+      }
       if (pending.current) {
         queued.current = { text, source };
         transport.current?.interrupt();
@@ -97,7 +189,8 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
         );
         heard.current = undefined;
         setTyped("");
-        if (queued.current) {
+        if (result.session.state === "COMPLETE") apply(result.session);
+        else if (!ending.current && queued.current) {
           current.current = result.session;
           setSession(result.session);
         } else apply(result.session);
@@ -107,8 +200,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
           const response = await fetch(`/api/sessions/${s.id}`);
           if (response.ok) {
             const latest = await response.json();
-            current.current = latest.session;
-            setSession(latest.session);
+            apply(latest.session);
           }
         } catch {
           /* The saved version is recovered on reconnect. */
@@ -118,30 +210,20 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
         setBusy(false);
         const next = queued.current;
         queued.current = null;
-        if (next) sendRef.current(next.text, next.source);
+        if (next && !ending.current && current.current.state !== "COMPLETE")
+          sendRef.current(next.text, next.source);
       }
     },
-    [apply],
+    [apply, finish],
   );
   useEffect(() => {
     sendRef.current = (text, source) => {
       void send(text, source);
     };
   }, [send]);
-  const disconnect = useCallback(() => {
-    connectionEpoch.current++;
-    connecting.current = false;
-    active.current = false;
-    transport.current?.disconnect();
-    transport.current = null;
-    setVoice(false);
-    setPlaybackBlocked(false);
-    setAudioLevel(0);
-    setWords(Number.MAX_SAFE_INTEGER);
-    setStatus("idle");
-  }, []);
   const connect = useCallback(async () => {
     if (
+      ending.current ||
       connecting.current ||
       active.current ||
       current.current.state === "COMPLETE"
@@ -257,7 +339,8 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
     }
   }
   const p = session.conversation,
-    complete = session.state === "COMPLETE";
+    complete = session.state === "COMPLETE",
+    reviewing = session.state === "SESSION_REVIEW";
   return (
     <div className="conversation-layout">
       <div className="conversation-top">
@@ -268,90 +351,229 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
       </div>
       <div className="conversation-workspace">
         <div className="conversation-main">
-          <div className="conversation-skill">
-            <span className="eyebrow">
-              {p?.returningTo ? "A HELPFUL BUILDING BLOCK" : "OUR FOCUS"}
-            </span>
-            <h1>{p?.currentSkill ?? "A little learning, just for you"}</h1>
-            {!complete && (
-              <p className="lesson-task" aria-label="Current problem">
-                {session.question.prompt}
+          <section className="active-task" aria-label="Question and answer">
+            <div className="conversation-skill">
+              <span className="eyebrow">
+                {p?.returningTo ? "A HELPFUL BUILDING BLOCK" : "OUR FOCUS"}
+              </span>
+              <p className="task-skill-name">
+                {p?.currentSkill ?? "A little learning, just for you"}
               </p>
-            )}
-            {p?.returningTo && (
-              <p className="muted small">
-                Then we’ll return to {p.returningTo.toLowerCase()}.
-              </p>
-            )}
-          </div>
-          <TeachingCanvas
-            cues={p?.cues ?? []}
-            actions={p?.canvasActions ?? []}
-            words={words}
-            onAnswer={(answer) => void send(answer, "canvas")}
-          />
-          {session.question.choices &&
-            p?.teachingMove !== "guided_step" &&
-            !complete &&
-            !session.answerAccess.revealed && (
-              <section
-                className="choice-workspace"
-                aria-labelledby="choice-title"
-              >
-                <div className="choice-workspace-heading">
-                  <div>
-                    <span className="eyebrow">YOUR ANSWER SPACE</span>
-                    <h2 id="choice-title">Which choice fits best?</h2>
-                  </div>
-                  <p>
-                    Compare each option with the question before you choose.
-                  </p>
-                </div>
-                <div className="prominent-choices" role="radiogroup">
-                  {session.question.choices.map((choice, index) => {
-                    const selected =
-                      selectedChoice.questionId === session.question.id &&
-                      selectedChoice.value === choice;
-                    return (
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        className={selected ? "selected" : ""}
-                        key={choice}
-                        disabled={busy}
-                        onClick={() =>
-                          setSelectedChoice({
-                            questionId: session.question.id,
-                            value: choice,
-                          })
-                        }
-                      >
-                        <strong>{String.fromCharCode(65 + index)}</strong>
-                        <span>{choice}</span>
-                        <i aria-hidden>{selected ? "✓" : ""}</i>
-                      </button>
-                    );
-                  })}
-                </div>
+              {!complete && (
+                <h1 className="lesson-task" aria-label="Current problem">
+                  {reviewing
+                    ? "How did today’s learning feel?"
+                    : session.question.prompt}
+                </h1>
+              )}
+              {p?.returningTo && (
+                <p className="muted small">
+                  Then we’ll return to {p.returningTo.toLowerCase()}.
+                </p>
+              )}
+            </div>
+            {reviewing && (
+              <div className="review-actions">
+                <p>
+                  You can share how it felt, keep practising, or finish now.
+                </p>
+                {["A little clearer", "Ready for more", "Still tricky"].map(
+                  (label) => (
+                    <button
+                      className="button secondary"
+                      key={label}
+                      disabled={busy || finishing}
+                      onClick={() => void send(label, "text")}
+                    >
+                      {label}
+                    </button>
+                  ),
+                )}
                 <button
-                  className="button choice-submit"
-                  disabled={
-                    busy ||
-                    selectedChoice.questionId !== session.question.id ||
-                    !selectedChoice.value
-                  }
-                  onClick={() => void send(selectedChoice.value, "text")}
+                  className="text-button"
+                  disabled={busy || finishing}
+                  onClick={() => void send("Continue", "text")}
                 >
-                  Choose this answer
-                  <ArrowRight size={17} />
+                  Keep practising
                 </button>
-              </section>
+              </div>
             )}
-          <SharedWhiteboard
-            sessionId={session.id}
-            onAnswer={(answer) => void send(answer, "canvas")}
-          />
+            {p?.assessment && !reviewing && (
+              <div
+                className={`answer-result ${p.assessment.correct ? "correct" : "incorrect"}`}
+                role="status"
+              >
+                <strong>
+                  {p.assessment.correct ? "Correct" : "Not quite yet"}
+                </strong>
+                <span>Your answer: {p.assessment.answer}</span>
+                {p.assessment.prompt !== session.question.prompt && (
+                  <span>
+                    That was the previous question. Your next question is above.
+                  </span>
+                )}
+              </div>
+            )}
+            {session.question.choices &&
+              !reviewing &&
+              !complete &&
+              !session.answerAccess.revealed && (
+                <section
+                  className="choice-workspace"
+                  aria-labelledby="choice-title"
+                >
+                  <div className="choice-workspace-heading">
+                    <div>
+                      <h2 id="choice-title">
+                        {p?.teachingMove === "guided_step"
+                          ? "Choices for the full problem"
+                          : "Choose your answer"}
+                      </h2>
+                    </div>
+                    <p>
+                      {p?.teachingMove === "guided_step"
+                        ? "First, work through the current step on the canvas. These choices answer the full problem."
+                        : "Say a letter, tap an option, or explain your answer."}
+                    </p>
+                  </div>
+                  <div
+                    className={`prominent-choices${session.question.choices.some((choice) => choice.length > 65) ? " long-choices" : ""}`}
+                    role="group"
+                    aria-label="Answer choices"
+                  >
+                    {session.question.choices.map((choice, index) => {
+                      const selected =
+                        selectedChoice.questionId === session.question.id &&
+                        selectedChoice.value === choice;
+                      const assessed =
+                        p?.assessment?.prompt === session.question.prompt &&
+                        p.assessment.answer === choice
+                          ? p.assessment.correct
+                            ? "correct"
+                            : "incorrect"
+                          : "";
+                      return (
+                        <button
+                          type="button"
+                          aria-pressed={selected}
+                          className={`${selected ? "selected" : ""} ${assessed}`}
+                          key={choice}
+                          disabled={
+                            busy ||
+                            finishing ||
+                            p?.teachingMove === "guided_step"
+                          }
+                          onClick={() =>
+                            setSelectedChoice({
+                              questionId: session.question.id,
+                              value: choice,
+                            })
+                          }
+                        >
+                          <strong>{String.fromCharCode(65 + index)}</strong>
+                          <span>{choice}</span>
+                          <i aria-hidden>
+                            {assessed === "incorrect"
+                              ? "×"
+                              : selected || assessed === "correct"
+                                ? "✓"
+                                : ""}
+                          </i>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    className="button choice-submit"
+                    disabled={
+                      busy ||
+                      p?.teachingMove === "guided_step" ||
+                      selectedChoice.questionId !== session.question.id ||
+                      !selectedChoice.value
+                    }
+                    onClick={() => void send(selectedChoice.value, "canvas")}
+                  >
+                    Choose this answer
+                    <ArrowRight size={17} />
+                  </button>
+                </section>
+              )}
+            {!complete &&
+              !reviewing &&
+              (showText || !session.question.choices?.length) && (
+                <div className="conversation-fallback task-response">
+                  <h2>
+                    {session.question.subject === "Math"
+                      ? "Your answer or next step"
+                      : "Your claim and evidence"}
+                  </h2>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void send(typed, "text");
+                    }}
+                  >
+                    <label htmlFor="conversation-answer">
+                      Your answer or question
+                    </label>
+                    <textarea
+                      id="conversation-answer"
+                      value={typed}
+                      onChange={(e) => setTyped(e.target.value)}
+                      maxLength={1500}
+                      placeholder="I think it’s… or ask me a question"
+                      rows={3}
+                    />
+                    <button
+                      className="button full"
+                      disabled={busy || !typed.trim()}
+                    >
+                      {busy ? (
+                        <LoaderCircle className="spin" size={17} />
+                      ) : (
+                        <>
+                          Send
+                          <ArrowRight size={17} />
+                        </>
+                      )}
+                    </button>
+                  </form>
+                  <div className="conversation-shortcuts">
+                    {[
+                      "Can you explain why?",
+                      "Try an easier example",
+                      "Can you show me?",
+                      "Continue",
+                    ].map((t) => (
+                      <button
+                        key={t}
+                        disabled={busy}
+                        onClick={() => void send(t, "text")}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+          </section>
+          {!complete && !reviewing && (
+            <TeachingCanvas
+              cues={p?.cues ?? []}
+              actions={p?.canvasActions ?? []}
+              words={words}
+              onAnswer={(answer) => void send(answer, "canvas")}
+            />
+          )}
+          {!complete && !reviewing && (
+            <details className="optional-working">
+              <summary>Open your working board</summary>
+              <SharedWhiteboard
+                sessionId={session.id}
+                onAnswer={(answer) => void send(answer, "canvas")}
+              />
+            </details>
+          )}
         </div>
         <aside className="conversation-controls">
           <div
@@ -471,57 +693,6 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                 <Keyboard size={16} />
                 {showText ? "Hide text controls" : "Type an answer"}
               </button>
-              {showText && (
-                <div className="conversation-fallback">
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void send(typed, "text");
-                    }}
-                  >
-                    <label className="sr-only" htmlFor="conversation-answer">
-                      Your answer or question
-                    </label>
-                    <textarea
-                      id="conversation-answer"
-                      value={typed}
-                      onChange={(e) => setTyped(e.target.value)}
-                      maxLength={1500}
-                      placeholder="I think it’s… or ask me a question"
-                      rows={3}
-                    />
-                    <button
-                      className="button full"
-                      disabled={busy || !typed.trim()}
-                    >
-                      {busy ? (
-                        <LoaderCircle className="spin" size={17} />
-                      ) : (
-                        <>
-                          Send
-                          <ArrowRight size={17} />
-                        </>
-                      )}
-                    </button>
-                  </form>
-                  <div className="conversation-shortcuts">
-                    {[
-                      "Can you explain why?",
-                      "Try an easier example",
-                      "Can you show me?",
-                      "Continue",
-                    ].map((t) => (
-                      <button
-                        key={t}
-                        disabled={busy}
-                        onClick={() => void send(t, "text")}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </>
           )}
           {complete && (
@@ -568,10 +739,11 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
         </Link>
         <button
           className="text-button"
-          disabled={busy || complete}
-          onClick={() => void send("finish for today", "text")}
+          disabled={finishing || complete}
+          aria-busy={finishing}
+          onClick={() => void finish()}
         >
-          Finish for today
+          {finishing ? "Saving your lesson…" : "Finish session"}
         </button>
       </div>
     </div>

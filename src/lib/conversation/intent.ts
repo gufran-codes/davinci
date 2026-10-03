@@ -6,6 +6,8 @@ export interface UnderstoodTurn {
   term?: string;
   confidence?: "low" | "medium" | "high";
   reasoning?: string;
+  ambiguity?: "clear" | "ambiguous";
+  needsClarification?: boolean;
 }
 const numbers: Record<string, string> = {
   zero: "0",
@@ -82,11 +84,27 @@ export function spokenMath(input: string) {
     .replace(/\bminus\b/g, "-");
   return text;
 }
+/** Stop requests are commands; "stop" alone remains a temporary pause. */
+export function requestsSessionEnd(transcript: string) {
+  const t = transcript.toLowerCase().replace(/[’]/g, "'").trim();
+  if (/\b(?:don't|do not|not ready to|not done|haven't)\b/.test(t))
+    return false;
+  return (
+    (/^(?:(?:please|okay|ok|well|thanks)[, ]+)*(?:(?:can|could|may) (?:we|i|you) |(?:i (?:want|would like) to |let's ))?(?:finish|end|stop|quit|wrap up)(?: (?:the |this |my |our )?(?:session|lesson|learning|practice)| for (?:today|now)| now| here| please)?[.!?]*$/.test(
+      t,
+    ) &&
+      !/^stop[.!?]*$/.test(t)) ||
+    /^(?:i(?:'m| am) done(?: for (?:today|now)| (?:with )?(?:this|the lesson|the session))?|that's (?:enough|all)(?: for today)?|no more (?:lessons|questions)(?: today)?|bye|goodbye)[.!?]*$/.test(
+      t,
+    )
+  );
+}
 export function understandLocally(
   transcript: string,
   q: Question,
 ): UnderstoodTurn {
   const t = transcript.toLowerCase().replace(/[’]/g, "'").trim();
+  if (requestsSessionEnd(t)) return { intent: "end_session" };
   if (
     /\b(?:another|other|different|alternate) (?:way|method|approach|solution)\b/.test(
       t,
@@ -120,12 +138,11 @@ export function understandLocally(
   }
   if (/^(wait|stop|hold on|one moment|let me think|pause)[.!?]*$/.test(t))
     return { intent: "wait" };
-  if (
-    /\b(finish|done for today|end (the )?lesson|bye|a little clearer|ready for more|still tricky)\b/.test(
-      t,
-    )
-  )
-    return { intent: "finish" };
+  if (/^(?:a little clearer|ready for more|still tricky)[.!?]*$/.test(t))
+    return {
+      intent: "reflection",
+      confidence: /tricky/.test(t) ? "low" : "high",
+    };
   if (
     /^(resume|continue|go on|next|i'm ready|i am ready|okay|ok)[.!?]*$/.test(t)
   )

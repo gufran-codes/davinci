@@ -106,6 +106,7 @@ test("student space: subject search, persistent schedule, saved lesson and respo
   ).sessions;
   expect(saved).toHaveLength(1);
   expect(saved[0].id).toBe(startedSession.id);
+  await page.getByText("Open your working board", { exact: true }).click();
   const board = page.getByRole("region", { name: "Shared whiteboard" });
   await board.getByRole("button", { name: "text", exact: true }).click();
   await page.getByLabel("Text or equation").fill("My saved thinking");
@@ -114,27 +115,16 @@ test("student space: subject search, persistent schedule, saved lesson and respo
     .click({ position: { x: 60, y: 60 } });
   await board.getByRole("button", { name: "Save work", exact: true }).click();
   await expect(board.getByRole("status")).toHaveText("Work saved");
-  const review = page.waitForResponse(
-    (response) =>
-      response
-        .url()
-        .endsWith(`/api/sessions/${startedSession.id}/conversation`) &&
-      response.request().method() === "POST",
+  const completed = page.waitForResponse(
+    (r) =>
+      r.url().endsWith(`/api/sessions/${startedSession.id}/finish`) &&
+      r.request().method() === "POST",
   );
   await page
-    .getByRole("button", { name: "Finish for today", exact: true })
+    .getByRole("button", { name: "Finish session", exact: true })
     .click();
-  expect((await (await review).json()).session.state).toBe("SESSION_REVIEW");
-  await page
-    .getByRole("button", { name: "Type an answer", exact: true })
-    .click();
-  await page
-    .getByRole("textbox", { name: "Your answer or question" })
-    .fill("A little clearer");
-  await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(
-    page.getByRole("link", { name: "See your little step forward" }),
-  ).toBeVisible();
+  expect((await (await completed).json()).session.state).toBe("COMPLETE");
+  await expect(page).toHaveURL(/\/complete$/);
   await page.goto(`${root}/sessions/${startedSession.id}`);
   await expect(
     page.getByRole("heading", { name: "Your saved whiteboard" }),

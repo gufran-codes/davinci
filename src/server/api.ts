@@ -465,6 +465,33 @@ export async function handle(req: NextRequest, path: string[]) {
         deliveredSpeech(child, session.id, receipt);
         return NextResponse.json({ ok: true });
       }
+      if (path[2] === "finish" && method === "POST") {
+        const input = z
+          .object({
+            requestId: z.string().uuid(),
+            heard: z
+              .object({
+                turnId: z.string().uuid(),
+                spokenText: z.string().max(6000),
+                interrupted: z.boolean(),
+              })
+              .optional(),
+          })
+          .parse(await body(req));
+        const next = await conversationTurn(child, session.id, {
+          requestId: input.requestId,
+          version: session.version,
+          transcript: "Finish the session.",
+          source: "text",
+          heard: input.heard,
+        });
+        return NextResponse.json({
+          session: await publicSession(next, learnerFor(child.id), {
+            grade: child.grade,
+            age: child.age,
+          }),
+        });
+      }
       if (path[2] === "conversation" && method === "POST") {
         rateLimit(`conversation:${user.id}`, 500);
         const input = z

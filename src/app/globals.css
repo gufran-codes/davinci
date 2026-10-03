@@ -3223,6 +3223,7 @@ small,
   flex: 1;
 }
 .choice-workspace {
+  container-type: inline-size;
   margin: 18px 0;
   padding: 24px;
   border: 1px solid #dbe4cf;
@@ -3252,6 +3253,43 @@ small,
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 13px;
+}
+.prominent-choices.long-choices {
+  grid-template-columns: 1fr;
+}
+@container (max-width: 560px) {
+  .prominent-choices {
+    grid-template-columns: 1fr;
+  }
+}
+.prominent-choices button span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.prominent-choices button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+.task-response {
+  margin: 22px 0;
+  padding: 24px;
+  background: #fffef9;
+  border: 1px solid #dbe4cf;
+  border-radius: 16px;
+}
+.task-response h2 {
+  font-size: 24px;
+  margin: 0 0 16px;
+}
+.task-response label {
+  display: block;
+  margin-bottom: 8px;
+}
+.task-response textarea {
+  width: 100%;
+  min-height: 110px;
+  font-size: 17px;
+  line-height: 1.6;
 }
 .prominent-choices button {
   min-height: 82px;
@@ -3304,6 +3342,103 @@ small,
 }
 .choice-submit {
   margin: 17px 0 0 auto;
+}
+/* The current task owns the desk; models and scratch work support it below. */
+.active-task {
+  background: #fffefa;
+  border: 1px solid #dddcd1;
+  border-radius: 22px;
+  padding: clamp(20px, 3vw, 36px);
+  margin-bottom: 24px;
+  min-width: 0;
+  box-shadow: 0 6px 24px #393f2c06;
+}
+.active-task .task-skill-name {
+  margin: 7px 0 22px;
+  color: #68725e;
+  font-size: 14px;
+}
+.active-task h1.lesson-task {
+  font: 500 clamp(24px, 2.4vw, 34px)/1.4 var(--serif);
+  letter-spacing: -0.4px;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: 0;
+  overflow-wrap: anywhere;
+}
+.active-task .choice-workspace,
+.active-task .task-response {
+  border: 0;
+  border-top: 1px solid #e6e7dd;
+  border-radius: 0;
+  padding: 24px 0 0;
+  margin: 24px 0 0;
+  background: none;
+  box-shadow: none;
+}
+.active-task .choice-workspace-heading {
+  display: block;
+}
+.active-task .choice-workspace-heading h2 {
+  font: 600 14px/1.5 var(--sans);
+  margin-bottom: 5px;
+}
+.active-task .choice-workspace-heading p {
+  max-width: none;
+}
+.active-task .prominent-choices {
+  gap: 12px;
+}
+.active-task .prominent-choices button {
+  font-size: 17px;
+}
+.prominent-choices button.correct {
+  border-color: #47704e;
+  background: #edf6ee;
+}
+.prominent-choices button.incorrect {
+  border-color: #ad674c;
+  background: #fff4ee;
+}
+.prominent-choices button.incorrect i {
+  color: #984b32;
+}
+.answer-result {
+  display: grid;
+  gap: 5px;
+  padding: 14px 18px;
+  margin-top: 20px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+.answer-result.correct {
+  background: #edf6ee;
+  color: #36573c;
+}
+.answer-result.incorrect {
+  background: #fff4ee;
+  color: #85462f;
+}
+.optional-working {
+  margin-top: 24px;
+}
+.optional-working > summary {
+  cursor: pointer;
+  padding: 14px 0;
+  color: #64705a;
+}
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+.review-actions p {
+  flex-basis: 100%;
+}
+.conversation-main > .teaching-canvas {
+  min-height: 0;
 }
 .dynamic-math-canvas {
   min-height: 205px;
@@ -3700,7 +3835,7 @@ small,
     align-items: stretch;
     padding: 25px;
     position: static;
-    order: -1;
+    order: 0;
   }
   .voice-orb {
     width: 62px;
