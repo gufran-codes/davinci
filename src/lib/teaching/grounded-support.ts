@@ -147,6 +147,28 @@ export function supportPlans(q: Question, example: Question): SupportPlan[] {
     const source = q.visuals.filter((v) =>
       ["passage", "table", "map", "timeline", "diagram"].includes(v.type),
     );
+    // An explicit chain in the task is already educational source data (for
+    // example grass → rabbit → fox). Draw that chain without inventing links.
+    const chain = q.prompt.match(
+      /(?:^|\bIn )([^?.:\n]*→[^?.:\n]*?)(?:,|[?.]|$)/i,
+    )?.[1];
+    const nodes = chain
+      ?.replace(/^in\s+/i, "")
+      .split("→")
+      .map((part) => part.trim());
+    if (
+      !source.length &&
+      nodes &&
+      nodes.length >= 2 &&
+      nodes.length <= 8 &&
+      nodes.every((n) => n.length > 0 && n.length <= 160)
+    )
+      source.push({
+        type: "diagram",
+        title: "Follow the relationships in the question",
+        nodes,
+        links: nodes.slice(1).map((_, i) => [i, i + 1] as [number, number]),
+      });
     const focus =
       q.subject === "Science"
         ? "observation or measurement"

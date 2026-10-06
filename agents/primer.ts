@@ -7,6 +7,7 @@ import * as cartesia from "@livekit/agents-plugin-cartesia";
 import * as silero from "@livekit/agents-plugin-silero";
 import { RoomEvent } from "@livekit/rtc-node";
 import type { PublicSession } from "../src/server/provider";
+import { voiceStatusPacket } from "./protocol";
 
 type LatencyMetric = {
   type: "orchestration" | "stt" | "turn" | "tts";
@@ -177,7 +178,7 @@ export default defineAgent({
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (e) => {
       void ctx.room.localParticipant?.publishData(
         new TextEncoder().encode(
-          JSON.stringify({ type: "status", status: e.newState }),
+          JSON.stringify(voiceStatusPacket(e.newState, state)),
         ),
         { reliable: true },
       );
@@ -214,6 +215,17 @@ export default defineAgent({
         .find((p) => (p.spokenText ?? p.text).startsWith(text));
       if (!p) return;
       const interrupted = e.item.interrupted;
+      void ctx.room.localParticipant?.publishData(
+        new TextEncoder().encode(
+          JSON.stringify({
+            type: "speech_progress",
+            turnId: p.turnId,
+            words: text.trim().split(/\s+/).filter(Boolean).length,
+            interrupted,
+          }),
+        ),
+        { reliable: true },
+      );
       receiptQueue = receiptQueue
         .then(() =>
           call({

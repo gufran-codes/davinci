@@ -283,3 +283,73 @@ test("choice schema rejects duplicate choices and answer keys absent from the op
   content.questions[0].choices = ["other", "different"];
   assert.equal(skillContentSchema.safeParse(content).success, false);
 });
+
+test("long choice labels and letters preserve grading values; a selection asks for reasoning", async () => {
+  const f = fixture("g4_math_addition");
+  const s = f.session;
+  assert.equal(
+    interpretTaskUtterance(s.question.choiceLabels![s.question.answer], s)
+      .answer,
+    s.question.answer,
+  );
+  const explained = interpretTaskUtterance(
+    `${s.question.choiceLabels![s.question.answer].toLowerCase()} because I combined the hundreds, tens and ones.`,
+    s,
+  );
+  assert.equal(explained.answer, s.question.answer);
+  assert.ok(explained.reasoning);
+  const next = await conversationTurn(f.child, s.id, {
+    requestId: randomUUID(),
+    version: s.version,
+    source: "canvas",
+    transcript: s.question.answer,
+  });
+  assert.equal(next.teaching!.awaitingReasoning, true);
+  assert.equal(next.conversation!.teachingMove, "ask_reasoning");
+  assert.equal(
+    learnerFor(f.child.id).states[s.question.conceptId]
+      .successfulIndependentAttempts,
+    0,
+  );
+  assert.equal(
+    learnerFor(f.child.id).states[s.question.conceptId].evidence.at(-1)!
+      .outcome,
+    "recognition_success",
+  );
+});
+
+test("spoken option aliases earn recognition credit rather than independent mastery", () => {
+  const f = fixture("g4_math_addition");
+  const index = f.session.question.choices!.indexOf(f.session.question.answer);
+  const next = f.say(`Option ${String.fromCharCode(65 + index)}`);
+  assert.equal(next.teaching!.awaitingReasoning, true);
+  assert.equal(
+    learnerFor(f.child.id).states[next.question.conceptId].evidence.at(-1)!
+      .outcome,
+    "recognition_success",
+  );
+});
+
+test("writing options are scaffolds; choosing a model sentence never grades writing", async () => {
+  const f = fixture("g4_english_composition");
+  const s = f.session;
+  const before = JSON.stringify(learnerFor(f.child.id));
+  const next = await conversationTurn(f.child, s.id, {
+    requestId: randomUUID(),
+    version: s.version,
+    source: "canvas",
+    transcript: s.question.answer,
+  });
+  assert.equal(next.attempts, 0);
+  assert.equal(JSON.stringify(learnerFor(f.child.id)), before);
+  assert.ok(next.assistance >= 2);
+  assert.match(next.conversation!.spokenText!, /own words/);
+  assert.equal(
+    interpretTaskUtterance(
+      "The garden helps us learn because we can measure the plants each week.",
+      next,
+      "text",
+    ).intent,
+    "answer",
+  );
+});

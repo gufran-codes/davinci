@@ -1,11 +1,18 @@
+import { prepareChoices } from "../../../content/curriculum/choices/prepare";
 import raw from "../../../content/curriculum/grades-1-5.json";
 import { secondaryCurriculum } from "../../../content/curriculum/secondary";
 import { skillContentSchema } from "../../../content/curriculum/schema";
 import type { Concept, Question, Visual } from "../types";
 import type { Rubric, TeachingMaterial } from "./types";
-export const curriculumContent = skillContentSchema
-  .array()
-  .parse([...raw, ...secondaryCurriculum]);
+export const curriculumContent = skillContentSchema.array().parse(
+  skillContentSchema
+    .array()
+    .parse([...raw, ...secondaryCurriculum])
+    .map((c) => ({
+      ...c,
+      questions: c.questions.map((q, i) => prepareChoices(q, c.subject, i)),
+    })),
+);
 export const expandedMisconceptions = curriculumContent.flatMap((c) =>
   c.misconceptions.map((m) => ({
     id: m.id,
@@ -64,6 +71,8 @@ export function contentQuestion(
     prompt: item.prompt,
     answer: item.answer,
     choices: item.choices,
+    choiceLabels: item.choiceLabels,
+    choiceMode: item.choiceMode,
     hint: item.hint,
     explanation: item.explanation,
     concrete: item.context,

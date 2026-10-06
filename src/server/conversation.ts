@@ -1,3 +1,4 @@
+import { alignWhiteboard } from "../lib/teaching/whiteboard-playback";
 import {
   sessionIntelligence,
   startDiagnosticProbe,
@@ -318,6 +319,7 @@ export function replaceTutorSpeech(
     }
     s.conversation = undefined;
     verifyTutorTurn(s, p);
+    alignWhiteboard(p, prior.spokenText ?? prior.text);
     if (input.quality?.usedFallback && p.verification) {
       p.verification.passed = false;
       p.verification.revised = true;
@@ -501,6 +503,29 @@ function saveTurn(
   p: ConversationPresentation,
   source: string,
 ) {
+  // Write only wording already approved by the teaching policy. Independent
+  // tasks and lifecycle/social turns never receive an extra explanatory scaffold.
+  if (
+    !p.canvasActions?.length &&
+    !p.cues.some((cue) => cue.visuals.length) &&
+    s.assistance > 0 &&
+    !["COMPLETE", "SESSION_REVIEW"].includes(s.state) &&
+    ["hint", "show", "confused", "easier", "why"].includes(p.intent)
+  ) {
+    const note = (p.spokenText ?? p.text).split(/(?<=[.!])\s+/)[0];
+    if (note && !note.includes("?") && note.length <= 500)
+      p.canvasActions = [
+        {
+          type: "writeText",
+          id: "teaching-note",
+          owner: "tutor",
+          atWord: 0,
+          text: note,
+          style: "note",
+        },
+      ];
+  }
+  alignWhiteboard(p);
   s.conversation = p;
   const memory = memoryFor(s);
   memory.recentTutorTurns = [
@@ -1035,6 +1060,18 @@ export function converse(
       } else
         direct =
           "What detail or example supports your idea? You can also say “give me a hint.”";
+    } else if (
+      s.question.choiceMode === "writing_support" &&
+      ["answer", "correction"].includes(turn.intent) &&
+      s.question.choices?.includes(turn.answer ?? "")
+    ) {
+      s.assistance = Math.max(s.assistance, 2);
+      event(s, "writing_starter_selected", {
+        questionId: s.question.id,
+        starter: turn.answer,
+        masteryCredit: 0,
+      });
+      direct = `Use that as a starting idea, then explain it in your own words with a reason or example. ${s.question.prompt}`;
     } else if (turn.intent === "answer" || turn.intent === "correction") {
       if (s.state === "SESSION_REVIEW") {
         s.state = "TEACH";
@@ -1053,6 +1090,19 @@ export function converse(
             "I didn’t catch your answer clearly. Could you say it another way?";
         else {
           saveSession(s);
+          const selected =
+            input.source === "canvas" ||
+            /^(?:(?:i think |i choose |i pick |option |answer |the answer is )*)(?:[a-f]|(?:the )?(?:first|second|third|fourth|fifth|sixth)(?: (?:one|choice|option))?)[.!?]*$/i.test(
+              input.transcript.trim(),
+            ) ||
+            Object.values(s.question.choiceLabels ?? {}).some(
+              (label) =>
+                label.toLowerCase().replace(/[.!?]+$/, "") ===
+                input.transcript
+                  .trim()
+                  .toLowerCase()
+                  .replace(/[.!?]+$/, ""),
+            );
           const correct = gradeQuestion(s.question, answer);
           assessment = {
             questionId: s.question.id,
@@ -1066,6 +1116,7 @@ export function converse(
             version: s.version,
             answer,
             reasoning: turn.reasoning,
+            responseMode: selected ? "selected" : "constructed",
           });
           const state = memoryFor(s);
           const probed = finishDiagnosticProbe(s, correct);
@@ -1078,9 +1129,20 @@ export function converse(
                 version: s.version,
               });
               prefix = `That building block works. Back to ${conceptById[frame.skillId].name.toLowerCase()}.`;
-            } else if (s.attempts % 3 === 0 && !state.awaitingReasoning) {
+            } else if (
+              (selected || s.attempts % 3 === 0) &&
+              !turn.reasoning &&
+              !state.awaitingReasoning
+            ) {
               state.awaitingReasoning = true;
-              direct = "That’s right. How did you figure it out?";
+              direct =
+                s.question.subject === "Math"
+                  ? "That choice fits. What calculation or relationship helped you decide?"
+                  : s.question.subject === "Science"
+                    ? "That choice fits. Which observation supports your explanation?"
+                    : s.question.subject === "English"
+                      ? "That choice fits. Which words or details support it?"
+                      : "That choice fits. Which detail in the source, map, or question supports it?";
             } else {
               s = advanceSession(child, id, {
                 action: "continue",
@@ -1129,6 +1191,8 @@ export function converse(
     s.version++;
     const p = presentation(s, turn.intent, prefix);
     p.assessment = assessment;
+    if (memoryFor(s).awaitingReasoning && s.feedback)
+      p.teachingMove = "ask_reasoning";
     if (returnedFromGuidedSteps) p.teachingMove = "return_to_task";
     if (direct) {
       p.text = direct;

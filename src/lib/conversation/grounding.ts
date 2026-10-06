@@ -15,6 +15,8 @@ export function taskSnapshot(s: LearningSession) {
     skillId: skill.id,
     focus: dialogueFocus(s),
     choices: s.question.choices ?? [],
+    choiceLabels: s.question.choiceLabels ?? {},
+    choiceMode: s.question.choiceMode,
   };
 }
 export function responsePlan(s: LearningSession) {

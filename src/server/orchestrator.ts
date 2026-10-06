@@ -244,6 +244,7 @@ export type SessionAction = {
   version: number;
   answer?: string;
   reasoning?: string;
+  responseMode?: "selected" | "constructed";
   reflection?: string;
   note?: string;
   confidence?: "guessing" | "pretty_sure" | "very_sure";
@@ -340,6 +341,8 @@ export function advanceSession(
         : undefined;
       const reasoningQuality =
         reasoning?.sufficient && !reasoning.contradicted ? reasoning.score : 0;
+      const recognitionOnly =
+        input.responseMode === "selected" && reasoningQuality < 0.65;
       observeAssessment(s, learner, q, answer, correct, reasoningQuality);
       const after = updateMastery(
         before,
@@ -350,7 +353,11 @@ export function advanceSession(
         q.id,
         s.id,
         new Date(),
-        { confidence: memory.signals.confidence, reasoningQuality },
+        {
+          confidence: memory.signals.confidence,
+          reasoningQuality,
+          recognitionOnly,
+        },
       );
       learner.states[q.conceptId] = after;
       memory.attempts.push({
@@ -488,8 +495,9 @@ export function advanceSession(
         },
       );
       if (correct) {
-        if (s.assistance === 0) memory.signals.independentSuccesses++;
-        else memory.signals.supportSuccesses++;
+        if (s.assistance === 0 && !recognitionOnly)
+          memory.signals.independentSuccesses++;
+        else if (s.assistance > 0) memory.signals.supportSuccesses++;
         memory.signals.frustration = Math.max(
           0,
           memory.signals.frustration - 1,
@@ -501,8 +509,9 @@ export function advanceSession(
           sourceQuestionId: independentCheck.sourceQuestionId,
           correct,
           assisted: s.assistance > 0,
+          recognitionOnly,
         });
-        if (correct && s.assistance === 0) {
+        if (correct && s.assistance === 0 && !recognitionOnly) {
           for (const entry of memory.assistanceLedger)
             if (
               entry.conceptId === q.conceptId &&

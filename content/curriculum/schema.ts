@@ -59,8 +59,12 @@ export const skillContentSchema = z.object({
             .object({ id: z.string(), answer: z.string() })
             .optional(),
           prompt: z.string().min(8),
-           
+
           answer: z.string().min(1),
+          choiceLabels: z
+            .record(z.string(), z.string().trim().min(8))
+            .optional(),
+          choiceMode: z.enum(["answer", "writing_support"]).optional(),
           choices: z.array(z.string().trim().min(1)).min(2).max(6).optional(),
           explanation: z.string(),
           context: z.string(),
@@ -69,6 +73,27 @@ export const skillContentSchema = z.object({
         })
         .superRefine((question, context) => {
           if (!question.choices) return;
+          if (
+            question.choiceLabels &&
+            (Object.keys(question.choiceLabels).length !==
+              question.choices.length ||
+              question.choices.some((c) => !question.choiceLabels?.[c]))
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["choiceLabels"],
+              message: "Every choice must have exactly one display label.",
+            });
+          if (
+            question.choiceLabels &&
+            new Set(Object.values(question.choiceLabels)).size !==
+              question.choices.length
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["choiceLabels"],
+              message: "Display labels must be distinct.",
+            });
           const choices = question.choices.map((choice) =>
             choice.toLowerCase(),
           );

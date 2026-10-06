@@ -118,6 +118,8 @@ export interface Question {
   concrete: string;
   visuals: Visual[];
   choices?: string[];
+  choiceLabels?: Record<string, string>;
+  choiceMode?: "answer" | "writing_support";
   misconception?: { id: string; answer: string };
   exact?: boolean;
   transfer: boolean;
@@ -172,6 +174,7 @@ export interface Evidence {
   confidence?: "unknown" | "low" | "medium" | "high";
 }
 export type AssessmentOutcome =
+  | "recognition_success"
   | "independent_success"
   | "assisted_success"
   | "transfer_success"

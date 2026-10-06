@@ -1,3 +1,4 @@
+import { prepareChoices } from "../../content/curriculum/choices/prepare";
 import { arithmeticQuestion } from "./teaching/arithmetic-bank";
 import { equivalenceQuestion } from "./teaching/fraction-bank";
 import {
@@ -474,6 +475,7 @@ export function getQuestion(id: string, seed = 0, transfer = false): Question {
       ? equivalenceQuestion(seed, transfer)
       : (arithmeticQuestion(id, seed, transfer) ??
         rawQuestion(id, seed, transfer));
+  Object.assign(q, prepareChoices(q, q.subject, seed));
   q.responseModes = [
     "voice",
     q.choices?.length
@@ -520,6 +522,10 @@ export function gradeSkillAnswer(
   return norm(input) === norm(answer);
 }
 export function gradeQuestion(q: Question, input: string): boolean {
+  input =
+    Object.entries(q.choiceLabels ?? {}).find(
+      ([, label]) => label.toLowerCase() === input.trim().toLowerCase(),
+    )?.[0] ?? input;
   if (q.responseType === "writing")
     return assessReasoning(input, rubricFor(q)).sufficient;
   return gradeSkillAnswer(input, q.answer, q.exact, q.subject);

@@ -74,17 +74,22 @@ export function updateMastery(
   context: {
     confidence?: "unknown" | "low" | "medium" | "high";
     reasoningQuality?: number;
+    recognitionOnly?: boolean;
   } = {},
 ): LearnerConceptState {
   const s = structuredClone(state),
-    outcome = assessmentOutcome({
-      correct,
-      assistance,
-      transfer,
-      confidence: context.confidence,
-    }),
+    outcome =
+      correct && context.recognitionOnly
+        ? "recognition_success"
+        : assessmentOutcome({
+            correct,
+            assistance,
+            transfer,
+            confidence: context.confidence,
+          }),
     delta =
-      (outcome === "assisted_success" && assistance >= 2
+      ((outcome === "assisted_success" || outcome === "recognition_success") &&
+      assistance >= 2
         ? teachingPolicy.evidence.heavySupportCorrect
         : masteryDeltaFor(outcome)) +
       (correct &&
@@ -94,12 +99,16 @@ export function updateMastery(
         ? 0.02
         : 0);
   s.masteryScore = Math.max(0, Math.min(1, s.masteryScore + delta));
-  s.masteryConfidence = Math.min(0.95, s.masteryConfidence + 0.07);
+  s.masteryConfidence = Math.min(
+    0.95,
+    s.masteryConfidence + (context.recognitionOnly ? 0.02 : 0.07),
+  );
   s.lastPracticedAt = now.toISOString();
   if (correct) s.lastDemonstratedAt = now.toISOString();
-  if (correct && assistance === 0) s.successfulIndependentAttempts++;
-  else if (correct) s.assistedAttempts++;
-  else s.incorrectAttempts++;
+  if (correct && assistance === 0 && !context.recognitionOnly)
+    s.successfulIndependentAttempts++;
+  else if (correct && assistance > 0) s.assistedAttempts++;
+  else if (!correct) s.incorrectAttempts++;
   s.scaffoldingLevel =
     s.masteryScore < teachingPolicy.mastery.veryLow
       ? 2
@@ -112,7 +121,12 @@ export function updateMastery(
   )
     s.lastMasteredAt = now.toISOString();
   const due = s.nextReviewAt && new Date(s.nextReviewAt) <= now;
-  if (correct && assistance === 0 && s.masteryScore >= 0.65) {
+  if (
+    correct &&
+    assistance === 0 &&
+    !context.recognitionOnly &&
+    s.masteryScore >= 0.65
+  ) {
     if (due) s.reviewStage = Math.min(4, s.reviewStage + 1);
     if (!s.nextReviewAt || due)
       s.nextReviewAt = new Date(
@@ -134,20 +148,22 @@ export function updateMastery(
       sessionId,
       outcome,
       reason:
-        correct &&
-        assistance === 0 &&
-        context.confidence !== "low" &&
-        (context.reasoningQuality ?? 0) >= 0.65
-          ? "Correct independently with rubric-supported reasoning; stronger evidence (+0.02)."
-          : outcome === "transfer_success"
-            ? "Correct on a transfer problem without assistance."
-            : outcome === "independent_success"
-              ? "Correct without assistance."
-              : outcome === "assisted_success"
-                ? `Correct with assistance level ${assistance}.`
-                : outcome === "guessing"
-                  ? "Correct while reporting low confidence; verify independently."
-                  : "Incorrect response; mastery estimate reduced.",
+        context.recognitionOnly && correct
+          ? "Recognized a correct choice; requires reasoning and a fresh independent check."
+          : correct &&
+              assistance === 0 &&
+              context.confidence !== "low" &&
+              (context.reasoningQuality ?? 0) >= 0.65
+            ? "Correct independently with rubric-supported reasoning; stronger evidence (+0.02)."
+            : outcome === "transfer_success"
+              ? "Correct on a transfer problem without assistance."
+              : outcome === "independent_success"
+                ? "Correct without assistance."
+                : outcome === "assisted_success"
+                  ? `Correct with assistance level ${assistance}.`
+                  : outcome === "guessing"
+                    ? "Correct while reporting low confidence; verify independently."
+                    : "Incorrect response; mastery estimate reduced.",
       reasoningQuality: context.reasoningQuality,
       confidence: context.confidence,
     },

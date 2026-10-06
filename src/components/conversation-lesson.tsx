@@ -42,7 +42,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
     [typed, setTyped] = useState(""),
     [interim, setInterim] = useState(""),
     [error, setError] = useState(""),
-    [words, setWords] = useState(Number.MAX_SAFE_INTEGER),
+    [words, setWords] = useState(-1),
     [showText, setShowText] = useState(false),
     [busy, setBusy] = useState(false),
     [selectedChoice, setSelectedChoice] = useState({
@@ -97,7 +97,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
         if (active.current) {
           setWords(-1);
           transport.current?.speak(next.conversation);
-        } else setWords(Number.MAX_SAFE_INTEGER);
+        } else setWords(-1);
       }
     },
     [disconnect, router],
@@ -249,6 +249,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
           return;
         }
         setStatus(next);
+        if (next === "speaking") setWords((count) => Math.max(0, count));
         if (next === "unavailable") {
           active.current = false;
           setVoice(false);
@@ -257,7 +258,10 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
       onPlaybackBlocked: (blocked: boolean) => {
         if (epoch === connectionEpoch.current) setPlaybackBlocked(blocked);
       },
-      onBoundary: setWords,
+      onBoundary: (count: number) => {
+        if (epoch === connectionEpoch.current && !ending.current)
+          setWords(count);
+      },
       onReceipt: (receipt: SpeechReceipt) => {
         heard.current = receipt;
         void api(`/api/sessions/${current.current.id}/speech`, receipt).catch(
@@ -269,7 +273,9 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
         setError(message);
         setShowText(true);
       },
-      onInterrupt: () => setStatus("listening"),
+      onInterrupt: () => {
+        if (epoch === connectionEpoch.current) setStatus("listening");
+      },
       onMetric: (metric: VoiceLatencyMetric) =>
         setLatency((current) => [...current.slice(-7), metric]),
       onAudioLevel: setAudioLevel,
@@ -425,19 +431,27 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                   <div className="choice-workspace-heading">
                     <div>
                       <h2 id="choice-title">
-                        {p?.teachingMove === "guided_step"
-                          ? "Choices for the full problem"
-                          : "Choose your answer"}
+                        {p?.teachingMove === "ask_reasoning"
+                          ? "Explain your choice"
+                          : p?.teachingMove === "guided_step"
+                            ? "Choices for the full problem"
+                            : session.question.choiceMode === "writing_support"
+                              ? "Choose an idea to build on"
+                              : "Choose your answer"}
                       </h2>
                     </div>
                     <p>
-                      {p?.teachingMove === "guided_step"
-                        ? "First, work through the current step on the canvas. These choices answer the full problem."
-                        : "Say a letter, tap an option, or explain your answer."}
+                      {p?.teachingMove === "ask_reasoning"
+                        ? "Your choice is saved. Tell Da Vinci what helped you decide, or type your reasoning below."
+                        : p?.teachingMove === "guided_step"
+                          ? "First, work through the current step on the canvas. These choices answer the full problem."
+                          : session.question.choiceMode === "writing_support"
+                            ? "These are starting ideas. You will still write or say your own response."
+                            : "Compare the choices. Say a letter, tap an option, or explain your answer."}
                     </p>
                   </div>
                   <div
-                    className={`prominent-choices${session.question.choices.some((choice) => choice.length > 65) ? " long-choices" : ""}`}
+                    className={`prominent-choices${session.question.choices.some((choice) => (session.question.choiceLabels?.[choice] ?? choice).length > 65) ? " long-choices" : ""}`}
                     role="group"
                     aria-label="Answer choices"
                   >
@@ -461,7 +475,8 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                           disabled={
                             busy ||
                             finishing ||
-                            p?.teachingMove === "guided_step"
+                            p?.teachingMove === "guided_step" ||
+                            p?.teachingMove === "ask_reasoning"
                           }
                           onClick={() =>
                             setSelectedChoice({
@@ -471,7 +486,9 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                           }
                         >
                           <strong>{String.fromCharCode(65 + index)}</strong>
-                          <span>{choice}</span>
+                          <span>
+                            {session.question.choiceLabels?.[choice] ?? choice}
+                          </span>
                           <i aria-hidden>
                             {assessed === "incorrect"
                               ? "×"
@@ -488,19 +505,25 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                     disabled={
                       busy ||
                       p?.teachingMove === "guided_step" ||
+                      p?.teachingMove === "ask_reasoning" ||
                       selectedChoice.questionId !== session.question.id ||
                       !selectedChoice.value
                     }
                     onClick={() => void send(selectedChoice.value, "canvas")}
                   >
-                    Choose this answer
+                    {session.question.choiceMode === "writing_support"
+                      ? "Use this starting idea"
+                      : "Choose this answer"}
                     <ArrowRight size={17} />
                   </button>
                 </section>
               )}
             {!complete &&
               !reviewing &&
-              (showText || !session.question.choices?.length) && (
+              (showText ||
+                session.question.choiceMode === "writing_support" ||
+                p?.teachingMove === "ask_reasoning" ||
+                !session.question.choices?.length) && (
                 <div className="conversation-fallback task-response">
                   <h2>
                     {session.question.subject === "Math"
@@ -559,9 +582,20 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
           </section>
           {!complete && !reviewing && (
             <TeachingCanvas
+              key={p?.turnId ?? session.question.id}
               cues={p?.cues ?? []}
               actions={p?.canvasActions ?? []}
               words={words}
+              speechDriven={voice || status === "connecting"}
+              speaking={status === "speaking" && !playbackBlocked}
+              blocked={busy || finishing || Boolean(p?.paused)}
+              onPauseSpeech={() => {
+                transport.current?.interrupt();
+                setStatus("listening");
+              }}
+              onInspect={(label) =>
+                void send(`What does “${label}” mean here?`, "text")
+              }
               onAnswer={(answer) => void send(answer, "canvas")}
             />
           )}

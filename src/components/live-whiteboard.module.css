@@ -1,0 +1,130 @@
+.surface {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.writing {
+  margin: 0;
+  padding: 1.15rem 1.3rem;
+  border-left: 3px solid #769363;
+  background: #f8f9f3;
+  border-radius: 0 12px 12px 0;
+  font-size: clamp(1rem, 1.7vw, 1.25rem);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.calculation {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1.25rem, 2.7vw, 2rem);
+}
+.ink {
+  animation: ink-in 260ms both;
+  animation-delay: var(--ink-delay, 0ms);
+}
+.marked {
+  background: #e3eeb6;
+  border-radius: 3px;
+  transition: background 250ms;
+}
+.diagram {
+  margin: 0;
+  min-width: 0;
+}
+.diagram figcaption {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+.diagram svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  color: #6b865c;
+}
+.connector {
+  stroke: currentColor;
+  stroke-width: 2.5;
+  fill: none;
+  stroke-dasharray: 1;
+  animation: draw-connection 700ms ease-out both;
+}
+.nodeEntrance {
+  animation: node-in 350ms ease-out both;
+}
+.node {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border: 2px solid #d5decd;
+  border-radius: 16px;
+  background: #fcfdf8;
+  color: #30483b;
+  font-family: inherit;
+  font-size: 20px;
+  line-height: 1.35;
+  padding: 12px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.node:hover,
+.node[aria-pressed="true"] {
+  border-color: #6c9055;
+  background: #eef4e7;
+}
+.node:focus-visible {
+  outline: 3px solid #315744;
+  outline-offset: -5px;
+}
+.diagramHint {
+  min-height: 2rem;
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: #6a795e;
+}
+.diagramHint button {
+  color: #315744;
+  border: 1px solid #d5decd;
+  border-radius: 9px;
+  padding: 0.6rem 0.8rem;
+  background: #fff;
+  cursor: pointer;
+  white-space: normal;
+  text-align: left;
+}
+@keyframes ink-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes draw-connection {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes node-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ink,
+  .connector,
+  .nodeEntrance {
+    animation: none;
+  }
+}

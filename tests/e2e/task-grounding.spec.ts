@@ -69,5 +69,12 @@ for (const [skill, phrase] of [
     expect(body.session.teachingDebug.lastTurn.interpretationSource).toBe(
       "local",
     );
+    await expect(
+      page.getByRole("heading", { name: "Explain your choice" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Choose this answer" }),
+    ).toBeDisabled();
+    await expect(page.getByRole("textbox")).toBeVisible();
   });
 }

@@ -270,6 +270,7 @@ export async function conversationTurn(
         dialogueFocus(s).kind === "answer" &&
         s.question.choices?.length &&
         ["answer", "correction"].includes(understood.intent) &&
+        s.question.responseType !== "writing" &&
         !s.question.choices.includes(understood.answer ?? "")
       )
         understood = {

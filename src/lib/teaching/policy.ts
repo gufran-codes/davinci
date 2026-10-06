@@ -11,6 +11,7 @@ export const teachingPolicy = {
   },
   evidence: {
     independentCorrect: 0.08,
+    recognitionCorrect: 0.02,
     transferCorrect: 0.12,
     lightSupportCorrect: 0.04,
     heavySupportCorrect: 0.01,
@@ -49,6 +50,8 @@ export function assessmentOutcome(input: {
 
 export function masteryDeltaFor(outcome: AssessmentOutcome) {
   switch (outcome) {
+    case "recognition_success":
+      return teachingPolicy.evidence.recognitionCorrect;
     case "transfer_success":
       return teachingPolicy.evidence.transferCorrect;
     case "independent_success":

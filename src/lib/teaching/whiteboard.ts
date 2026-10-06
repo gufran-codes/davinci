@@ -43,6 +43,32 @@ const fraction = z.object({
 });
 export const canvasActionSchema = z.discriminatedUnion("type", [
   z.object({
+    type: z.literal("writeText"),
+    ...tutorAction,
+    text: z.string().min(1).max(500),
+    style: z.enum(["note", "calculation", "question"]).default("note"),
+  }),
+  z.object({
+    type: z.literal("drawDiagramNode"),
+    ...tutorAction,
+    diagramId: z.string().min(1).max(80),
+    title: z.string().max(160),
+    label: z.string().min(1).max(160),
+  }),
+  z.object({
+    type: z.literal("connectDiagramNodes"),
+    ...tutorAction,
+    diagramId: z.string().min(1).max(80),
+    fromId: z.string().min(1).max(80),
+    toId: z.string().min(1).max(80),
+  }),
+  z.object({
+    type: z.literal("highlightText"),
+    ...tutorAction,
+    targetId: z.string().min(1).max(80),
+    phrase: z.string().min(1).max(160),
+  }),
+  z.object({
     type: z.literal("addText"),
     ...tutorAction,
     text: z.string().max(500),
@@ -264,6 +290,58 @@ export function visualActionSequence(
   visuals.forEach((visual, index) => {
     const id = `visual-${index}`;
     switch (visual.type) {
+      case "diagram":
+        if (visual.nodes.length > 8 || visual.nodes.some((n) => n.length > 160))
+          break;
+        visual.nodes.forEach((label, n) =>
+          actions.push({
+            type: "drawDiagramNode",
+            id: `${id}-node-${n}`,
+            owner: "tutor",
+            diagramId: id,
+            title: visual.title,
+            label,
+            atWord: n * 4,
+          }),
+        );
+        visual.links.forEach(([from, to], n) => {
+          if (!visual.nodes[from] || !visual.nodes[to]) return;
+          actions.push({
+            type: "connectDiagramNodes",
+            id: `${id}-link-${n}`,
+            owner: "tutor",
+            diagramId: id,
+            fromId: `${id}-node-${from}`,
+            toId: `${id}-node-${to}`,
+            atWord: Math.max(from, to) * 4 + 2,
+          });
+        });
+        break;
+      case "passage":
+        if (visual.text.length > 500) break;
+        actions.push({
+          type: "writeText",
+          id,
+          owner: "tutor",
+          text: visual.text,
+          style: "note",
+          atWord: 0,
+        });
+        visual.highlights
+          .filter(
+            (phrase) => phrase.length <= 160 && visual.text.includes(phrase),
+          )
+          .forEach((phrase, n) =>
+            actions.push({
+              type: "highlightText",
+              id: `${id}-highlight-${n}`,
+              owner: "tutor",
+              targetId: id,
+              phrase,
+              atWord: (n + 1) * 4,
+            }),
+          );
+        break;
       case "equation":
         actions.push({
           type: "showEquation",

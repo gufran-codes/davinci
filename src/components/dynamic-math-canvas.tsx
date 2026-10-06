@@ -2,6 +2,7 @@
 
 import type { CanvasAction } from "@/lib/teaching/whiteboard";
 import { FractionBar } from "./math-visuals";
+import { WrittenText } from "./live-whiteboard";
 
 function latest<T extends CanvasAction["type"]>(
   actions: CanvasAction[],
@@ -69,28 +70,33 @@ function NumberLineStage({ actions }: { actions: CanvasAction[] }) {
 }
 
 function EquationStage({ actions }: { actions: CanvasAction[] }) {
-  const shown = latest(actions, "showEquation");
-  const step = latest(actions, "animateEquationStep");
-  const highlight = latest(actions, "highlightTerm");
-  const equation = step?.to ?? shown?.equation;
-  if (!equation) return null;
-  const parts = highlight
-    ? equation.split(
-        new RegExp(
-          `(${highlight.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-          "i",
-        ),
-      )
-    : [equation];
+  const start = actions.findLastIndex((a) => a.type === "showEquation");
+  const current = actions.slice(Math.max(0, start));
+  const shown = latest(current, "showEquation");
+  const steps = current.filter(
+    (a): a is Extract<CanvasAction, { type: "animateEquationStep" }> =>
+      a.type === "animateEquationStep",
+  );
+  const highlight = latest(current, "highlightTerm");
+  const initial = shown?.equation ?? steps[0]?.from;
+  if (!initial) return null;
+  const lines = [
+    { id: shown?.id ?? "equation-start", text: initial },
+    ...steps.map((s) => ({ id: s.id, text: s.to })),
+  ];
   return (
-    <div className={`action-equation ${step ? "equation-stepped" : ""}`}>
-      {parts.map((part, index) =>
-        highlight && part.toLowerCase() === highlight.term.toLowerCase() ? (
-          <mark key={index}>{part}</mark>
-        ) : (
-          <span key={index}>{part}</span>
-        ),
-      )}
+    <div className="whiteboard-calculation" aria-label="Calculation steps">
+      {lines.map((line, index) => (
+        <div
+          key={line.id}
+          className={`action-equation ${index ? "equation-stepped" : ""} ${index < lines.length - 1 ? "previous-equation" : ""}`}
+        >
+          <WrittenText
+            text={line.text}
+            highlighted={highlight ? [highlight.term] : []}
+          />
+        </div>
+      ))}
     </div>
   );
 }
@@ -123,7 +129,14 @@ function ArrayAndCounters({ actions }: { actions: CanvasAction[] }) {
                 (group < counters.total % counters.groups ? 1 : 0),
             },
             (_, index) => {
-              return <i key={index} />;
+              return (
+                <i
+                  key={index}
+                  style={{
+                    animationDelay: `${(index * counters.groups + group) * 70}ms`,
+                  }}
+                />
+              );
             },
           )}
         </div>

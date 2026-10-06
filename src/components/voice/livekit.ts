@@ -2,6 +2,7 @@ import { Room, RoomEvent, Track } from "livekit-client";
 import type { PublicSession } from "@/server/provider";
 import type { ConversationPresentation } from "@/lib/teaching/types";
 import type { VoiceCallbacks, VoiceTransport } from "./transport";
+import { SpeechProgress } from "./speech-progress";
 export class LiveKitVoiceTransport implements VoiceTransport {
   private room = new Room({
     audioCaptureDefaults: {
@@ -13,6 +14,7 @@ export class LiveKitVoiceTransport implements VoiceTransport {
   private elements: HTMLMediaElement[] = [];
   private current: ConversationPresentation | undefined;
   private lastServerTurn = "";
+  private progress = new SpeechProgress();
   private intentionalDisconnect = false;
   private agentReady: (() => void) | undefined;
   private rejectReady: ((error: Error) => void) | undefined;
@@ -71,6 +73,12 @@ export class LiveKitVoiceTransport implements VoiceTransport {
         }
         if (data.type === "session" && data.session?.conversation) {
           this.current = data.session.conversation;
+          this.progress.reset(
+            this.current!.turnId,
+            this.current!.spokenText ?? this.current!.text,
+            true,
+          );
+          this.callbacks.onBoundary(-1);
           this.lastServerTurn = this.current!.turnId;
           this.onSession(data.session);
           this.agentReady?.();
@@ -80,8 +88,16 @@ export class LiveKitVoiceTransport implements VoiceTransport {
         if (
           data.type === "status" &&
           ["listening", "speaking", "thinking", "paused"].includes(data.status)
-        )
+        ) {
+          if (data.turnId && data.turnId !== this.current?.turnId) return;
+          if (data.status === "speaking") this.progress.start();
+          else this.progress.stop();
           this.callbacks.onStatus(data.status);
+        }
+        if (data.type === "speech_progress" && this.room.canPlaybackAudio) {
+          const count = this.progress.finish(data.turnId, data.words);
+          if (count !== null) this.callbacks.onBoundary(count);
+        }
         if (data.type === "latency" && data.metric)
           this.callbacks.onMetric(data.metric);
       } catch {
@@ -110,10 +126,13 @@ export class LiveKitVoiceTransport implements VoiceTransport {
         this.callbacks.onInterim(text);
         return;
       }
-      const text = segments.map((s) => s.text).join(" ");
-      if (this.current) {
-        const count = text.trim().split(/\s+/).filter(Boolean).length;
-        this.callbacks.onBoundary(count);
+      if (
+        this.current &&
+        this.room.canPlaybackAudio &&
+        (participant?.identity.startsWith("agent-") || participant?.kind === 4)
+      ) {
+        const count = this.progress.update(segments);
+        if (count !== null) this.callbacks.onBoundary(count);
       }
     });
     this.room.on(RoomEvent.Disconnected, () => {
@@ -181,6 +200,7 @@ export class LiveKitVoiceTransport implements VoiceTransport {
   }
   speak(p: ConversationPresentation) {
     this.current = p;
+    this.progress.reset(p.turnId, p.spokenText ?? p.text);
     if (p.turnId !== this.lastServerTurn)
       void this.room.localParticipant.publishData(
         new TextEncoder().encode(JSON.stringify({ type: "sync" })),
@@ -188,12 +208,15 @@ export class LiveKitVoiceTransport implements VoiceTransport {
       );
   }
   interrupt() {
+    this.progress.stop(true);
+    this.callbacks.onInterrupt();
     void this.room.localParticipant.publishData(
       new TextEncoder().encode(JSON.stringify({ type: "interrupt" })),
       { reliable: true },
     );
   }
   disconnect() {
+    this.progress.stop(true);
     this.intentionalDisconnect = true;
     this.rejectReady?.(Error("Voice connection cancelled."));
     this.rejectReady = undefined;

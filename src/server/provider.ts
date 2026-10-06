@@ -172,6 +172,8 @@ export function buildTeachingState(
       expectedAnswer: session.question.answer,
       rubric: rubricFor(session.question),
       choices: session.question.choices ?? [],
+      choiceLabels: session.question.choiceLabels ?? {},
+      choiceMode: session.question.choiceMode,
       acceptableAnswers: session.question.acceptableAnswers ?? [
         session.question.answer,
       ],
@@ -350,6 +352,8 @@ export async function publicSession(
       id: s.question.id,
       prompt: s.question.prompt,
       choices: s.question.choices,
+      choiceLabels: s.question.choiceLabels,
+      choiceMode: s.question.choiceMode,
       responseModes: s.question.responseModes,
       subject: s.question.subject,
     },

@@ -27,9 +27,15 @@ export function questionQuality(q: Question) {
       q.choices.length
     )
       issues.push("Duplicate options");
-    if (q.choices.filter((c) => gradeQuestion(q, c)).length !== 1)
+    if (
+      q.choiceMode !== "writing_support" &&
+      q.choices.filter((c) => gradeQuestion(q, c)).length !== 1
+    )
       issues.push("Choices must have exactly one correct answer");
-    if (q.options?.some((o) => !o.correct && !o.diagnosticMeaning))
+    if (
+      q.choiceMode !== "writing_support" &&
+      q.options?.some((o) => !o.correct && !o.diagnosticMeaning)
+    )
       issues.push("Distractor needs diagnostic review");
   }
   if (!q.explanation.trim()) issues.push("Missing solution reasoning");

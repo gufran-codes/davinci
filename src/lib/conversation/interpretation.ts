@@ -19,6 +19,25 @@ export function interpretTaskUtterance(
   const question = useChoices
     ? session.question
     : { ...session.question, choices: undefined };
+  const norm = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[.!?]+$/, "");
+  const [claim, ...reason] = text.split(/\b(?:because|since)\b/i);
+  const labelMatch =
+    useChoices &&
+    Object.entries(question.choiceLabels ?? {}).find(
+      ([, label]) => norm(label) === norm(text) || norm(label) === norm(claim),
+    );
+  if (labelMatch)
+    return {
+      intent: "answer",
+      answer: labelMatch[0],
+      reasoning:
+        norm(labelMatch[1]) !== norm(text) && reason.length ? text : undefined,
+      ambiguity: "clear",
+    };
   const local = understandLocally(text, question);
   if (
     !["answer", "reasoning", "correction", "off_topic"].includes(local.intent)
@@ -44,7 +63,6 @@ export function interpretTaskUtterance(
   }
   // A choice plus an explanation is still an answer attempt. A bare observation
   // belongs to the checkpoint being discussed, not automatically to the final key.
-  const [claim, ...reason] = text.split(/\b(?:because|since)\b/i);
   if (useChoices && question.choices) {
     const normalized = claim
       .trim()
@@ -68,7 +86,11 @@ export function interpretTaskUtterance(
           : undefined,
       };
     if (matches.length > 1) return unclear();
-    if (question.subject !== "Math" && local.intent === "answer")
+    if (
+      question.responseType !== "writing" &&
+      question.subject !== "Math" &&
+      local.intent === "answer"
+    )
       return unclear();
   }
   if (!useChoices && /^(?:option )?[a-f][.!?]*$/i.test(text)) return unclear();

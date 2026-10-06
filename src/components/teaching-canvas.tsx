@@ -1,10 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Pause, Play, RotateCcw, StepForward } from "lucide-react";
 import type { CanvasCue } from "@/lib/teaching/types";
 import type { CanvasAction } from "@/lib/teaching/whiteboard";
 import type { Visual } from "@/lib/types";
 import { MathVisual } from "./math-visuals";
 import { DynamicMathCanvas } from "./dynamic-math-canvas";
+import { LiveWhiteboard } from "./live-whiteboard";
+import { visibleWhiteboardActions } from "@/lib/teaching/whiteboard-playback";
 function CanvasVisual({
   visual,
   onAnswer,
@@ -172,46 +175,179 @@ export function TeachingCanvas({
   words,
   onAnswer,
   actions = [],
+  speechDriven = false,
+  speaking = false,
+  blocked = false,
+  onPauseSpeech,
+  onInspect,
 }: {
   cues: CanvasCue[];
   words: number;
   onAnswer: (answer: string) => void;
   actions?: CanvasAction[];
+  speechDriven?: boolean;
+  speaking?: boolean;
+  blocked?: boolean;
+  onPauseSpeech?: () => void;
+  onInspect?: (label: string) => void;
 }) {
-  const active = cues.filter((c) => c.atWord <= words),
-    activeActions = actions.filter((action) => action.atWord <= words),
-    upcomingModel = cues.find(
-      (c) => c.action === "show" && c.visuals.length > 0,
-    ),
-    model =
-      [...active]
-        .reverse()
-        .find((c) => c.action === "show" || c.action === "clear") ??
-      upcomingModel,
+  const steps = [
+    ...new Set([
+      0,
+      ...actions.map((a) => a.atWord),
+      ...cues.map((c) => c.atWord),
+    ]),
+  ].sort((a, b) => a - b);
+  const [playback, setPlayback] = useState({
+    step: 0,
+    playing: true,
+    manual: false,
+  });
+  const followingSpeech = speechDriven && !playback.manual;
+  const cursor = followingSpeech
+    ? words
+    : (steps[Math.min(playback.step, steps.length - 1)] ?? 0);
+  const step = Math.max(
+    0,
+    steps.findLastIndex((value) => value <= cursor),
+  );
+  const playing = followingSpeech
+    ? speaking
+    : playback.playing && step < steps.length - 1;
+  useEffect(() => {
+    if (
+      followingSpeech ||
+      blocked ||
+      !playback.playing ||
+      playback.step >= steps.length - 1
+    )
+      return;
+    const timer = setTimeout(
+      () => setPlayback((state) => ({ ...state, step: state.step + 1 })),
+      1600,
+    );
+    return () => clearTimeout(timer);
+  }, [followingSpeech, blocked, playback.playing, playback.step, steps.length]);
+  function control(nextStep: number, play: boolean) {
+    if (followingSpeech && speaking) onPauseSpeech?.();
+    setPlayback({ step: nextStep, playing: play, manual: true });
+  }
+  const active = cues.filter((c) => c.atWord <= cursor),
+    activeActions = visibleWhiteboardActions(actions, cursor),
+    model = [...active]
+      .reverse()
+      .find((c) => c.action === "show" || c.action === "clear"),
     focus = [...active].reverse().find((c) => c.action === "highlight"),
-    question =
-      [...active].reverse().find((c) => c.action === "question") ??
-      cues.find((c) => c.action === "question");
-  if (!activeActions.length && !model?.visuals.length && !question) return null;
+    question = [...active].reverse().find((c) => c.action === "question");
+  const fallbackVisuals = (model?.visuals ?? []).filter((v) => {
+    // Check representation in the full plan, not just already-visible actions:
+    // this preserves older mixed scenes without revealing future visuals early.
+    if (v.type === "diagram")
+      return !actions.some(
+        (a) => a.type === "drawDiagramNode" && a.title === v.title,
+      );
+    if (v.type === "passage")
+      return !actions.some((a) => a.type === "writeText" && a.text === v.text);
+    const kinds: Partial<Record<Visual["type"], CanvasAction["type"][]>> = {
+      equation: ["showEquation", "animateEquationStep"],
+      fraction_bar: ["showFractionBar", "showFractionBars"],
+      comparison: ["compareFractions"],
+      number_line: ["showNumberLine"],
+      array: ["showArray"],
+      counters: ["moveCounters"],
+      geometry: ["showGeometryShape"],
+    };
+    return !actions.some((a) => kinds[v.type]?.includes(a.type));
+  });
+  if (
+    !actions.length &&
+    !cues.some((c) => c.visuals.length || c.action === "question")
+  )
+    return null;
   return (
     <section
       className={`teaching-canvas ${focus ? "canvas-focused" : ""}`}
       aria-label="Teaching canvas"
+      data-whiteboard-paused={
+        blocked || (followingSpeech ? !speaking : !playback.playing)
+      }
     >
-      <span className="eyebrow">LET’S LOOK AT IT TOGETHER</span>
-      {activeActions.length ? (
-        <DynamicMathCanvas actions={activeActions} />
-      ) : model?.visuals.length ? (
+      <div className="whiteboard-heading">
+        <div>
+          <span className="eyebrow">OUR WHITEBOARD</span>
+          <p>
+            {followingSpeech
+              ? speaking
+                ? "Drawing along with Da Vinci"
+                : "Take a moment to look"
+              : "Explore one step at a time"}
+          </p>
+        </div>
+        {actions.length > 0 && (
+          <div
+            className="whiteboard-playback"
+            role="group"
+            aria-label="Whiteboard playback"
+          >
+            <button
+              aria-label="Replay visuals"
+              title="Replay visuals"
+              disabled={blocked}
+              onClick={() => control(0, true)}
+            >
+              <RotateCcw size={17} />
+            </button>
+            <button
+              aria-label={playing ? "Pause visuals" : "Play visuals"}
+              title={playing ? "Pause visuals" : "Play visuals"}
+              disabled={blocked}
+              onClick={() =>
+                control(step >= steps.length - 1 ? 0 : step, !playing)
+              }
+            >
+              {playing ? <Pause size={17} /> : <Play size={17} />}
+            </button>
+            <button
+              aria-label="Next visual step"
+              title="Next visual step"
+              disabled={blocked || step >= steps.length - 1}
+              onClick={() =>
+                control(Math.min(step + 1, steps.length - 1), false)
+              }
+            >
+              <StepForward size={17} />
+            </button>
+            <span aria-label="Visual step">
+              {step + 1} / {steps.length}
+            </span>
+          </div>
+        )}
+      </div>
+      {activeActions.some(
+        (a) =>
+          ![
+            "writeText",
+            "drawDiagramNode",
+            "connectDiagramNodes",
+            "highlightText",
+          ].includes(a.type),
+      ) && <DynamicMathCanvas actions={activeActions} />}
+      <LiveWhiteboard
+        actions={activeActions}
+        plan={actions}
+        onInspect={onInspect}
+      />
+      {fallbackVisuals.length > 0 && (
         <div className="canvas-models">
-          {model.visuals.map((v, i) => (
+          {fallbackVisuals.map((v, i) => (
             <CanvasVisual
-              key={`${model.label}-${JSON.stringify(v)}-${i}`}
+              key={`${model?.label}-${JSON.stringify(v)}-${i}`}
               visual={v}
               onAnswer={onAnswer}
             />
           ))}
         </div>
-      ) : null}
+      )}
       {focus && <p className="canvas-focus-label">{focus.highlight}</p>}
       {question && <h2 className="canvas-question">{question.label}</h2>}
     </section>

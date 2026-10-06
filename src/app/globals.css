@@ -4112,3 +4112,90 @@ small,
     flex-direction: column;
   }
 }
+
+/* Live teaching board: controls sit with the explanation, beneath the task. */
+.whiteboard-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.whiteboard-heading p {
+  font-size: 0.83rem;
+  color: var(--muted, #718067);
+  margin: 0.3rem 0 0;
+}
+.whiteboard-playback {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.whiteboard-playback button {
+  display: grid;
+  place-items: center;
+  min-height: 40px;
+  min-width: 40px;
+  border: 1px solid #d5decd;
+  border-radius: 10px;
+  background: #fff;
+  color: #315744;
+  cursor: pointer;
+}
+.whiteboard-playback button:hover:not(:disabled) {
+  background: #eef4e7;
+  border-color: #779466;
+}
+.whiteboard-playback button:focus-visible {
+  outline: 2px solid #315744;
+  outline-offset: 3px;
+}
+.whiteboard-playback button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.whiteboard-playback span {
+  color: #718067;
+  font-size: 0.8rem;
+  min-width: 3rem;
+  text-align: right;
+}
+.action-counter-groups i {
+  animation: whiteboard-counter-in 450ms both;
+}
+@keyframes whiteboard-counter-in {
+  from {
+    opacity: 0;
+    transform: translate(-10px, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+.teaching-canvas[data-whiteboard-paused="true"] * {
+  animation: none !important;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .teaching-canvas * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+.whiteboard-calculation {
+  display: grid;
+  gap: 0.65rem;
+  max-width: 100%;
+}
+.whiteboard-calculation .action-equation {
+  overflow-wrap: anywhere;
+}
+.whiteboard-calculation .previous-equation {
+  background: transparent;
+  color: #738168;
+  font-size: 1.35rem;
+  border-left: 2px solid #dbe4d2;
+  border-radius: 0;
+}

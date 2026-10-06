@@ -52,7 +52,11 @@ test("every secondary item self-grades, has one correct choice and valid visual 
           1,
           q.id,
         );
-      assert.deepEqual(questionQuality(q), [], q.id);
+      // Newly added numerical distractors remain explicitly unreviewed.
+      const expected = !c.questions[i].choices
+        ? ["Distractor needs diagnostic review"]
+        : [];
+      assert.deepEqual(questionQuality(q), expected, q.id);
       assert.doesNotThrow(() => visualActionSequence(q.visuals), q.id);
     }
 });
