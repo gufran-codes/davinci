@@ -99,6 +99,7 @@ export interface HintEvent {
   studentSucceededAfterHint?: boolean;
 }
 export interface TeachingMemory {
+  dialogue?: import("../conversation/student-dialogue").DialogueMemory;
   lastTurnTrace?: import("../conversation/grounding").TurnTrace;
   recentTutorTurns?: { turnId: string; questionId: string; text: string }[];
   supportPlan?: import("./grounded-support").SupportPlan & {
@@ -132,6 +133,8 @@ export interface TeachingMemory {
   reasoningPath: ReasoningTrace[];
   wordShare: { student: number; tutor: number };
   introducedPrompts: string[];
+  servedQuestions?: { skillId: string; prompt: string }[];
+  questionPoolExhausted?: boolean;
   goal: SessionTeachingGoal;
 }
 export interface Rubric {
@@ -169,14 +172,20 @@ export interface CanvasCue {
 }
 export interface ConversationPresentation {
   assessment?: {
+    optionLabel?: string;
     questionId: string;
     prompt: string;
     answer: string;
     correct: boolean;
+    explanation?: string;
+    responseMode?: "selected" | "constructed";
+    supportLevel?: number;
   };
   turnId: string;
   text: string;
   spokenText?: string;
+  /** Generated speech is never evidence of delivery; receipts remain separate. */
+  speechStatus?: "streaming" | "complete" | "interrupted";
   cues: CanvasCue[];
   canvasActions?: import("./whiteboard").CanvasAction[];
   intent: ConversationIntent;

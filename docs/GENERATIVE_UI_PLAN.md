@@ -1,4 +1,22 @@
-# Da Vinci generative UI: proposed Jev integration
+# Da Vinci generative UI
+
+## Implemented source-scene pipeline (10 October 2026)
+
+The tutoring pipeline compiles approved source content into progressive CanvasActions: source evidence with exact-quote emphasis, curriculum-authored SVG connections, zero-based bar comparisons from numeric two-column tables, timelines, and separate-example calculations. Existing fraction bars, arrays, geometry and guided math remain in use. **No visual is a valid result.** The active question and its copied scenario are removed from the whiteboard, not repackaged into generic cards or flowcharts.
+
+The optional OpenAI response includes bounded `visualDirection` and `teachingNote` fields alongside speech. It may emphasize exact source quotes or compare two sources. Prose-to-arrow proposals are now rejected: a textually faithful arrow can still be conceptually or spatially misleading. Teaching notes must be short, useful, exact excerpts of the final checked speech, not questions or copied prompts. Turn ID/version checks prevent stale plans from replacing the current board. No generated HTML, JSX or JavaScript is evaluated.
+
+Atomic-structure help has an interactive particle model when a single atom's counts are explicitly supplied. It separates protons, neutrons and electrons, labels missing counts as unknown, and does not infer neutrality, isotopes or electron shells. The cloud is a schematic region, not a claimed electron trajectory. Unsupported or ambiguous cases do not produce an invented model. Separate atomic-number worked examples teach the same counting operation rather than jumping to the isotope question in the same broad skill bank.
+
+Explanatory notes use original SVG pen-stroke glyphs with sequential drawing, a readable plain-text toggle, replay and reduced-motion support. Calculations retain conventional typography for legibility. Pausing/stepping settles the current drawing so it stays readable; replay remounts the strokes, including the first visual step.
+
+No model round trip is needed for fallback scenes. Final speech retimes actions; playback supports pause, stepping, replay, interrupted turns and reduced motion. Mobile diagrams stack vertically for legible labels. Student drawings stay separate. Jev remains uninstalled and is not required for this implementation.
+
+Verification: targeted unit/integration regressions and Chrome checks cover answer letters/full readings, guided-step escape to a final answer, idempotent progression, source validation, authored arrows, progressive charts, particle controls, pen strokes, replay, reduced motion and mobile overflow. Desktop and mobile screenshots were inspected. A live synthetic check on 10 October still returned `401 invalid_api_key`; live model conversation quality remains unverified until the configured key is corrected.
+
+Browser checks can run beside the developer app with `PRIMER_E2E=1`, a temporary `DATABASE_PATH`, and an empty `OPENAI_API_KEY` on port 3001. This uses `.next/e2e` instead of the normal build directory. Do not point browser tests at family lesson data.
+
+## Earlier proposal: Jev integration
 
 Updated 6 October 2026 after the user identified https://jev-ai.pro/. This independently operated service provides hosted access to TypeSafe's Jev model, with its own keys and billing. No Jev integration, dependency, account, or key has been added. See the [service's description](https://jev-ai.pro/).
 

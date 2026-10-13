@@ -1,4 +1,5 @@
 import type { Question, Strategy, Visual } from "../types";
+import { sourceVisuals } from "./source-diagram";
 
 export interface SupportPlan {
   id: string;
@@ -8,9 +9,46 @@ export interface SupportPlan {
   visuals: Visual[];
 }
 
+export function taskClue(q: Question) {
+  if (q.subject === "Science" && /atomic number/i.test(q.prompt))
+    return "Atomic number counts one kind of particle: protons. Neutrons affect mass, and electrons affect charge; neither is added to the atomic number.";
+  if (
+    q.subject === "Science" &&
+    /same number of protons.*different numbers of neutrons/i.test(q.prompt)
+  )
+    return "Keep the two roles separate: proton count identifies the element, while neutron count can vary within that element.";
+  if (q.subject === "Science" && /main-group.*same.*group/i.test(q.prompt))
+    return "Chemical reactions involve outer electrons. Compare that outer layer, rather than the total mass of the two atoms.";
+  return q.hint;
+}
+
+/** A separate example must exercise the same operation, not just share a broad
+ * skill ID (the atomic-structure bank also contains isotope/reactivity tasks). */
+export function authoredConceptExample(q: Question): Question | undefined {
+  if (q.subject !== "Science" || !/atomic number/i.test(q.prompt)) return;
+  const count = q.answer.trim() === "6" ? 3 : 6;
+  return {
+    ...q,
+    id: `${q.conceptId}:atomic-example-${count}`,
+    assessmentKey: `${q.conceptId}:atomic-example-${count}`,
+    prompt: `A separate atom has ${count} protons and ${count + 1} neutrons. What is its atomic number?`,
+    answer: String(count),
+    explanation: `Count only the ${count} protons: its atomic number is ${count}. The ${count + 1} neutrons are not added; adding them would give the mass number, a different quantity.`,
+    hint: taskClue(q),
+    visuals: [],
+    choices: undefined,
+    choiceLabels: undefined,
+    choiceMode: undefined,
+    options: undefined,
+    acceptableAnswers: undefined,
+    misconception: undefined,
+  };
+}
+
 // Alternatives are concrete teaching moves, not a rotation of strategy labels.
 // Every displayed quantity comes from the task or an explicitly separate example.
 export function supportPlans(q: Question, example: Question): SupportPlan[] {
+  example = authoredConceptExample(q) ?? example;
   const plans: SupportPlan[] = [];
   const add = (
     id: string,
@@ -27,7 +65,21 @@ export function supportPlans(q: Question, example: Question): SupportPlan[] {
       ? q.prompt.match(/Solve ((?:\d+)?x \+ (\d+) = (?:\d+x \+ )?\d+)/)
       : null;
   const fractions = q.subject === "Math" && (comparison || bar);
-  if (equation) {
+  if (q.subject === "Science" && /atomic number/i.test(q.prompt)) {
+    add("particle-role", "guided_questioning", taskClue(q), "");
+    add(
+      "number-versus-mass",
+      "compare_contrast",
+      "Atomic number and mass number count different things. Atomic number counts only protons; mass number counts protons plus neutrons. This task asks for the first count, so there is no addition to perform.",
+      "",
+    );
+    add(
+      "nucleus-count",
+      "diagram_first",
+      "Focus on the protons in the nucleus. Their count is the identity number for the element; changing an electron would change its charge, not that identity number.",
+      "",
+    );
+  } else if (equation) {
     const model: Visual[] = [{ type: "equation", equation: equation[1] }];
     add(
       "balance",
@@ -144,31 +196,9 @@ export function supportPlans(q: Question, example: Question): SupportPlan[] {
     );
   }
   if (!plans.length && q.subject !== "Math") {
-    const source = q.visuals.filter((v) =>
+    const source = sourceVisuals(q.prompt, q.visuals).filter((v) =>
       ["passage", "table", "map", "timeline", "diagram"].includes(v.type),
     );
-    // An explicit chain in the task is already educational source data (for
-    // example grass → rabbit → fox). Draw that chain without inventing links.
-    const chain = q.prompt.match(
-      /(?:^|\bIn )([^?.:\n]*→[^?.:\n]*?)(?:,|[?.]|$)/i,
-    )?.[1];
-    const nodes = chain
-      ?.replace(/^in\s+/i, "")
-      .split("→")
-      .map((part) => part.trim());
-    if (
-      !source.length &&
-      nodes &&
-      nodes.length >= 2 &&
-      nodes.length <= 8 &&
-      nodes.every((n) => n.length > 0 && n.length <= 160)
-    )
-      source.push({
-        type: "diagram",
-        title: "Follow the relationships in the question",
-        nodes,
-        links: nodes.slice(1).map((_, i) => [i, i + 1] as [number, number]),
-      });
     const focus =
       q.subject === "Science"
         ? "observation or measurement"
@@ -178,36 +208,42 @@ export function supportPlans(q: Question, example: Question): SupportPlan[] {
     add(
       "source-evidence",
       "evidence_first",
-      q.hint,
-      `Which ${focus} in this task would you use as evidence?`,
+      source.some((v) => v.type === "diagram") && /ecosystem/.test(q.conceptId)
+        ? "Read each arrow from the food toward the animal that consumes it. Follow one connection at a time; the direction tells you which role each organism plays."
+        : taskClue(q),
+      source.length
+        ? `Which ${focus} in this task would you use as evidence?`
+        : "",
       source,
     );
-    add(
-      "compare-claims",
-      "compare_contrast",
-      q.choices?.length
-        ? "Test the choices against the information shown. A claim needs support from this case, not just something that might happen elsewhere."
-        : "Separate what the source tells us from what we would need to find out.",
-      q.choices?.length
-        ? "Which choice can you rule out using a specific detail?"
-        : "Which detail do we know, and which claim are we checking?",
-      source,
-    );
-    add(
-      "trace-relationship",
-      q.subject === "English" ? "guided_annotation" : "diagram_first",
-      q.subject === "Science"
-        ? "Trace what changes and what stays the same in this case before making a prediction."
-        : q.subject === "English"
-          ? "Choose a short phrase from the text. Link that phrase to the inference you want to make."
-          : "Locate the place or event in the source, then trace the relationship the question asks about.",
-      q.subject === "Science"
-        ? "What changed in the situation described?"
-        : q.subject === "English"
-          ? "Which phrase connects directly to your idea?"
-          : "Which two details in the source need to be connected?",
-      source,
-    );
+    if (source.length)
+      add(
+        "compare-claims",
+        "compare_contrast",
+        q.choices?.length
+          ? "Test the choices against the information shown. A claim needs support from this case, not just something that might happen elsewhere."
+          : "Separate what the source tells us from what we would need to find out.",
+        q.choices?.length
+          ? "Which choice can you rule out using a specific detail?"
+          : "Which detail do we know, and which claim are we checking?",
+        source,
+      );
+    if (source.some((v) => v.type === "diagram" || v.type === "timeline"))
+      add(
+        "trace-relationship",
+        q.subject === "English" ? "guided_annotation" : "diagram_first",
+        q.subject === "Science"
+          ? "Follow the direction of each connection in the supplied model. Use only relationships it actually shows."
+          : q.subject === "English"
+            ? "Choose a short phrase from the text. Link that phrase to the inference you want to make."
+            : "Locate the place or event in the source, then trace the relationship the question asks about.",
+        q.subject === "Science"
+          ? "Which connection is relevant to the question?"
+          : q.subject === "English"
+            ? "Which phrase connects directly to your idea?"
+            : "Which two details in the source need to be connected?",
+        source,
+      );
   }
   if (!plans.length) {
     add(
@@ -265,7 +301,7 @@ export function selectSupportPlan(
       id: "locate-gap",
       strategy: "guided_questioning",
       message:
-        "Those explanations haven’t helped yet. Let’s locate the exact sticking point instead of repeating them.",
+        "We’ve tried the available approaches. I can slow down on the part you want to understand.",
       prompt:
         "Is it the meaning of a word, choosing a step, or carrying out the calculation?",
       visuals: [],
@@ -279,10 +315,31 @@ export function answerLessonQuestion(
   glossary: Record<string, string>,
 ) {
   const text = utterance.toLowerCase();
+  if (
+    q.subject === "Science" &&
+    /\batom|proton|electron/i.test(q.prompt) &&
+    /why|how|difference|mean|represent/i.test(text)
+  ) {
+    if (
+      /electron/.test(text) &&
+      /element|identity|atomic number|proton/.test(text)
+    )
+      return "An element is identified by the number of protons in its nucleus. Electrons have the opposite charge and sit outside the nucleus. Gaining or losing electrons changes the atom’s charge, but leaves that proton count—and therefore the element—unchanged.";
+    if (/atomic number|mass number/.test(text)) return taskClue(q);
+  }
+  if (
+    /fraction|equivalent|common_denominator|simplifying/.test(q.conceptId) &&
+    /what.*whole|whole.*(?:mean|represent)/.test(text)
+  )
+    return "The whole is the entire original object, such as one full bar, before any parts are selected. A small piece is part of that whole, not a new whole. We keep that reference size fixed when comparing the shares.";
+  if (/ecosystem/.test(q.conceptId) && /arrow|direction|food chain/.test(text))
+    return "In a food chain, the arrow points from food toward its consumer: it tracks the direction energy moves. Start at the animal you’re studying and trace an incoming arrow backward to its food. An outgoing arrow instead leads to an animal that consumes it.";
   // Why is not a dictionary lookup: answer the relationship being questioned.
   if (/why|how come/.test(text)) {
     if (
-      /both|multiply|divide|equivalent/.test(text) &&
+      /both|multiply|divide|equivalent|(?:amount|whole|share).*(?:same|change|fixed)|split/.test(
+        text,
+      ) &&
       /equivalent|common_denominator|simplifying/.test(q.conceptId)
     )
       return "Both counts must change together because every piece is being split or regrouped, including the selected pieces. Multiplying or dividing the top and bottom by the same nonzero number keeps the share unchanged.";

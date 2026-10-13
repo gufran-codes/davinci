@@ -87,6 +87,7 @@ export function structuredSkill(id: string) {
     name: concept.name,
     description: concept.description,
     learningObjectives: concept.learningObjectives,
+    lessonInstruction: content?.lesson,
     essentialKnowledge: [
       concept.description,
       ...new Set(questions.map((q) => q.explanation)),

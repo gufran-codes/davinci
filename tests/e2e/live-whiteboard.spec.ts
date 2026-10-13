@@ -137,9 +137,7 @@ test("whiteboard progressively draws, pauses, replays and replaces a turn at tab
   await expect(
     canvas.getByRole("button", { name: "Grass", exact: true }),
   ).toHaveCount(0);
-  await expect(canvas.locator("[data-whiteboard-writing]")).toContainText(
-    "one equal group",
-  );
+  await expect(canvas.getByRole("img", { name: "Look at one equal group before finding the total." })).toBeVisible();
   await expect(canvas.locator(".action-equation")).toContainText("24 ÷ 3 = ?");
   await canvas.getByRole("button", { name: "Pause visuals" }).click();
   await expect(canvas.locator(".action-equation")).toHaveCount(1);

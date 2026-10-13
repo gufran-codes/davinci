@@ -202,6 +202,7 @@ export function TeachingCanvas({
     step: 0,
     playing: true,
     manual: false,
+    replay: 0,
   });
   const followingSpeech = speechDriven && !playback.manual;
   const cursor = followingSpeech
@@ -230,7 +231,12 @@ export function TeachingCanvas({
   }, [followingSpeech, blocked, playback.playing, playback.step, steps.length]);
   function control(nextStep: number, play: boolean) {
     if (followingSpeech && speaking) onPauseSpeech?.();
-    setPlayback({ step: nextStep, playing: play, manual: true });
+    setPlayback((state) => ({
+      step: nextStep,
+      playing: play,
+      manual: true,
+      replay: state.replay + (nextStep === 0 && play ? 1 : 0),
+    }));
   }
   const active = cues.filter((c) => c.atWord <= cursor),
     activeActions = visibleWhiteboardActions(actions, cursor),
@@ -256,6 +262,8 @@ export function TeachingCanvas({
       array: ["showArray"],
       counters: ["moveCounters"],
       geometry: ["showGeometryShape"],
+      table: ["drawDataBar"],
+      timeline: ["drawTimelineEvent"],
     };
     return !actions.some((a) => kinds[v.type]?.includes(a.type));
   });
@@ -330,9 +338,14 @@ export function TeachingCanvas({
             "drawDiagramNode",
             "connectDiagramNodes",
             "highlightText",
+            "showEvidenceCard",
+            "drawDataBar",
+            "drawTimelineEvent",
+            "showAtomModel",
           ].includes(a.type),
       ) && <DynamicMathCanvas actions={activeActions} />}
       <LiveWhiteboard
+        key={playback.replay}
         actions={activeActions}
         plan={actions}
         onInspect={onInspect}

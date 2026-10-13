@@ -24,7 +24,10 @@ test("every grade and subject has distinct labelled choices without changing ans
         const labels = q.choices.map((v) => q.choiceLabels![v]);
         assert.equal(new Set(labels).size, labels.length, q.id);
         assert.ok(
-          labels.every((label) => label && label.length >= 8),
+          labels.every(
+            (label) =>
+              label && label.length >= 1 && !label.includes("I would choose"),
+          ),
           q.id,
         );
         if (q.choiceMode === "writing_support") continue;

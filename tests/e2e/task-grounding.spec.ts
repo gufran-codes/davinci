@@ -40,10 +40,11 @@ for (const [skill, phrase] of [
     await expect(choice).toHaveAttribute("aria-pressed", "true");
     await page.setViewportSize({ width: 1024, height: 900 });
     const optionsBounds = await options.boundingBox();
-    const canvasBounds = await page
-      .getByRole("region", { name: "Teaching canvas", exact: true })
-      .boundingBox();
-    expect(optionsBounds!.y).toBeLessThan(canvasBounds!.y);
+    const board = page.getByRole("region", { name: "Teaching canvas", exact: true });
+    if (await board.count()) {
+      const canvasBounds = await board.boundingBox();
+      expect(optionsBounds!.y).toBeLessThan(canvasBounds!.y);
+    }
     expect(optionsBounds!.width).toBeGreaterThan(400);
     expect(
       await page.evaluate(
@@ -69,12 +70,14 @@ for (const [skill, phrase] of [
     expect(body.session.teachingDebug.lastTurn.interpretationSource).toBe(
       "local",
     );
+    expect(body.session.conversation.assessment.correct).toBe(true);
+    expect(body.session.question.id).not.toBe(
+      body.session.conversation.assessment.questionId,
+    );
     await expect(
       page.getByRole("heading", { name: "Explain your choice" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Choose this answer" }),
-    ).toBeDisabled();
-    await expect(page.getByRole("textbox")).toBeVisible();
+    ).toHaveCount(0);
+    await expect(task).toHaveText(body.session.question.prompt);
+    await expect(options.getByRole("button").first()).toBeEnabled();
   });
 }

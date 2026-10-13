@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
+  // Keep isolated browser checks from contending with a running developer app.
+  distDir: process.env.PRIMER_E2E === "1" ? ".next/e2e" : ".next",
   serverExternalPackages: ["node:sqlite"],
   async headers() {
     return [

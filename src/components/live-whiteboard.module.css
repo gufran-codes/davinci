@@ -3,6 +3,179 @@
   gap: 1rem;
   min-width: 0;
 }
+.evidenceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 1rem;
+}
+.evidenceGrid[data-scene-layout="steps"] {
+  grid-template-columns: 1fr;
+}
+.sourceCard {
+  border: 1px solid #d6dfcf;
+  background: #fcfdf8;
+  border-radius: 16px;
+  padding: 1.1rem;
+  animation: node-in 350ms ease-out both;
+  min-width: 0;
+}
+.sourceCard header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.8rem;
+  color: #52654c;
+}
+.stepNumber {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  width: 1.7rem;
+  height: 1.7rem;
+  flex-shrink: 0;
+  background: #e9efdd;
+}
+.sourceCard p {
+  font-size: clamp(1rem, 1.6vw, 1.2rem);
+  line-height: 1.6;
+  margin: 0.8rem 0;
+  overflow-wrap: anywhere;
+}
+.sourceCard mark {
+  color: inherit;
+  background: #e3eeb6;
+  border-radius: 3px;
+}
+.inspectSource {
+  border: none;
+  border-bottom: 1px solid #b3c4a8;
+  padding: 0.25rem 0;
+  background: transparent;
+  color: #42643c;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.inspectSource:focus-visible {
+  outline: 2px solid #315744;
+  outline-offset: 4px;
+}
+.dataChart,
+.timelineScene {
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid #d6dfcf;
+  border-radius: 16px;
+  background: #fcfdf8;
+}
+.dataChart figcaption,
+.timelineScene figcaption {
+  font-weight: 600;
+  line-height: 1.4;
+}
+.chartScale {
+  display: flex;
+  justify-content: space-between;
+  margin: 1rem 0 0.6rem 32%;
+  color: #52654c;
+  font-size: 0.75rem;
+}
+.barRow {
+  display: grid;
+  grid-template-columns: 30% minmax(0, 1fr);
+  gap: 2%;
+  align-items: center;
+  min-height: 3.5rem;
+}
+.barLabel {
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.barTrack {
+  border-left: 1px solid #87927e;
+  height: 2rem;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent calc(25% - 1px),
+    #e1e6da calc(25% - 1px),
+    #e1e6da 25%
+  );
+  padding-right: 2rem;
+}
+.dataBar {
+  width: var(--bar-width);
+  min-width: 1px;
+  height: 100%;
+  background: #98b47c;
+  border-radius: 0 5px 5px 0;
+  transform-origin: left center;
+  animation: bar-grow 650ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  position: relative;
+}
+.dataBar span {
+  position: absolute;
+  left: 100%;
+  padding-left: 0.35rem;
+  color: #30483b;
+  top: 0.3rem;
+  font-size: 0.8rem;
+}
+.sceneCaption {
+  font-size: 0.7rem;
+  color: #63715c;
+  margin: 1rem 0 0;
+  line-height: 1.4;
+}
+.timelineScene ol {
+  list-style: none;
+  padding: 0 0 0 1rem;
+  margin: 1rem 0;
+}
+.timelineScene li {
+  position: relative;
+  border-left: 2px solid #98b47c;
+  padding: 0 0 1.5rem 1.5rem;
+  animation: node-in 350ms ease-out both;
+}
+.timelineScene li::before {
+  content: "";
+  position: absolute;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: #6b865c;
+  left: -0.4rem;
+  top: 0.25rem;
+}
+.timelineScene li:last-child {
+  padding-bottom: 0;
+}
+.timelineScene strong {
+  color: #42643c;
+}
+.timelineScene li p {
+  margin: 0.35rem 0 0;
+  line-height: 1.5;
+}
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+:global([data-whiteboard-paused="true"]) .sourceCard,
+:global([data-whiteboard-paused="true"]) .dataBar,
+:global([data-whiteboard-paused="true"]) .timelineScene li,
+:global([data-whiteboard-paused="true"]) .connector,
+:global([data-whiteboard-paused="true"]) .nodeEntrance,
+:global([data-whiteboard-paused="true"]) .ink {
+  animation: none;
+}
 .writing {
   margin: 0;
   padding: 1.15rem 1.3rem;
@@ -17,6 +190,164 @@
 .calculation {
   font-variant-numeric: tabular-nums;
   font-size: clamp(1.25rem, 2.7vw, 2rem);
+}
+.handwriting {
+  display: block;
+  font-size: clamp(1.35rem, 2vw, 1.7rem);
+  line-height: 1.65;
+  color: #244d48;
+}
+.handwriting svg {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 100%;
+  overflow: visible;
+}
+.penStroke {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  animation: pen-write var(--pen-duration) linear both;
+  animation-delay: var(--pen-delay);
+}
+.penSymbol {
+  fill: currentColor;
+  font:
+    26px Georgia,
+    serif;
+  animation: ink-in var(--pen-duration) both;
+  animation-delay: var(--pen-delay);
+}
+.plainNote {
+  font: 1.05rem/1.7 var(--font-sans, sans-serif);
+}
+.noteToggle {
+  display: block;
+  border: 0;
+  background: transparent;
+  color: #52654c;
+  text-decoration: underline;
+  font: 0.75rem/1.5 sans-serif;
+  padding: 0.5rem 0 0;
+  cursor: pointer;
+}
+.noteToggle:focus-visible {
+  outline: 2px solid #315744;
+  outline-offset: 4px;
+}
+:global([data-whiteboard-paused="true"]) .penStroke,
+:global([data-whiteboard-paused="true"]) .penSymbol {
+  animation: none;
+  stroke-dashoffset: 0;
+}
+@keyframes pen-write {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.atomScene {
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid #d6dfcf;
+  border-radius: 16px;
+  background: #fcfdf8;
+}
+.atomScene figcaption {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.atomScene svg {
+  width: 100%;
+  max-height: 270px;
+  display: block;
+}
+.electronCloud {
+  fill: #eef3fa;
+  stroke: #9eb5ce;
+  stroke-width: 2;
+  stroke-dasharray: 4 6;
+}
+.nucleus {
+  fill: #eee8d6;
+  stroke: #b5a77a;
+  stroke-width: 2;
+}
+.atomScene [data-active="true"] {
+  stroke: #315744;
+  stroke-width: 4;
+}
+.atomScene text {
+  fill: #30483b;
+  font: 24px sans-serif;
+}
+.atomScene .atomSmall {
+  font-size: 22px;
+}
+.atomCaption {
+  color: #52654c;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.particleControls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.particleControls button {
+  border: 1px solid #d6dfcf;
+  border-radius: 10px;
+  padding: 0.7rem 0.3rem;
+  background: white;
+  font: inherit;
+  color: #30483b;
+  cursor: pointer;
+}
+.particleControls button[aria-pressed="true"] {
+  background: #e7efdd;
+  border-color: #315744;
+}
+.particleControls button:focus-visible {
+  outline: 2px solid #315744;
+  outline-offset: 3px;
+}
+.particleControls span {
+  display: block;
+  font-size: 0.8rem;
+  text-transform: capitalize;
+}
+.particleControls strong {
+  display: block;
+  font-size: 0.95rem;
+  margin-top: 0.2rem;
+}
+.particleDetail {
+  min-height: 150px;
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+.particleDetail small {
+  color: #52654c;
+}
+.particleDots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+.particleDots span {
+  display: grid;
+  place-items: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  background: #dbe8cb;
+  border-radius: 50%;
+  color: #244d48;
 }
 .ink {
   animation: ink-in 260ms both;
@@ -48,6 +379,26 @@
   fill: none;
   stroke-dasharray: 1;
   animation: draw-connection 700ms ease-out both;
+}
+.diagram svg[data-vertical="true"] {
+  max-width: 360px;
+  margin-inline: auto;
+}
+.node[data-long-label="true"] {
+  font-size: 16px;
+}
+.relationshipLabel {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: #f6f8f1;
+  color: #30483b;
+  font-size: 15px;
+  line-height: 1.15;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 .nodeEntrance {
   animation: node-in 350ms ease-out both;
@@ -122,9 +473,19 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .penStroke,
+  .penSymbol {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
   .ink,
   .connector,
   .nodeEntrance {
+    animation: none;
+  }
+  .sourceCard,
+  .dataBar,
+  .timelineScene li {
     animation: none;
   }
 }

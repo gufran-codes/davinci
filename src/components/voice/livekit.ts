@@ -55,6 +55,7 @@ export class LiveKitVoiceTransport implements VoiceTransport {
       }
     });
     this.room.on(RoomEvent.DataReceived, (bytes, participant) => {
+      if (this.intentionalDisconnect) return;
       if (
         !participant?.identity.startsWith("agent-") &&
         participant?.kind !== 4
@@ -63,22 +64,23 @@ export class LiveKitVoiceTransport implements VoiceTransport {
       try {
         const data = JSON.parse(new TextDecoder().decode(bytes));
         if (data.type === "error") {
-          this.callbacks.onStatus("unavailable");
           this.callbacks.onError(
             "The tutor audio service stopped responding. Reconnect to continue, or type your answer.",
           );
+          this.callbacks.onStatus("unavailable");
           this.rejectReady?.(
             Error("The tutor audio service is unavailable. Please reconnect."),
           );
         }
         if (data.type === "session" && data.session?.conversation) {
+          const continuing = data.progressive === true && this.current?.turnId === data.session.conversation.turnId;
           this.current = data.session.conversation;
           this.progress.reset(
             this.current!.turnId,
             this.current!.spokenText ?? this.current!.text,
-            true,
+            !continuing,
           );
-          this.callbacks.onBoundary(-1);
+          if (!continuing) this.callbacks.onBoundary(-1);
           this.lastServerTurn = this.current!.turnId;
           this.onSession(data.session);
           this.agentReady?.();
@@ -115,10 +117,10 @@ export class LiveKitVoiceTransport implements VoiceTransport {
       );
     });
     this.room.on(RoomEvent.MediaDevicesError, () => {
-      this.callbacks.onStatus("unavailable");
       this.callbacks.onError(
         "Microphone access wasn’t available. Your lesson is saved; type to continue.",
       );
+      this.callbacks.onStatus("unavailable");
     });
     this.room.on(RoomEvent.TranscriptionReceived, (segments, participant) => {
       if (participant?.identity === this.room.localParticipant.identity) {
@@ -137,10 +139,13 @@ export class LiveKitVoiceTransport implements VoiceTransport {
     });
     this.room.on(RoomEvent.Disconnected, () => {
       if (this.intentionalDisconnect) return;
-      this.callbacks.onStatus("unavailable");
+      this.rejectReady?.(Error("Voice disconnected while connecting."));
+      clearInterval(this.levelTimer);
+      this.progress.stop(true);
       this.callbacks.onError(
         "The voice connection ended. Your lesson is saved; reconnect or type to continue.",
       );
+      this.callbacks.onStatus("unavailable");
     });
     await this.room.connect(this.url, this.token);
     if (this.intentionalDisconnect) {
@@ -201,11 +206,15 @@ export class LiveKitVoiceTransport implements VoiceTransport {
   speak(p: ConversationPresentation) {
     this.current = p;
     this.progress.reset(p.turnId, p.spokenText ?? p.text);
-    if (p.turnId !== this.lastServerTurn)
+    if (p.turnId !== this.lastServerTurn) {
+      this.lastServerTurn = p.turnId;
       void this.room.localParticipant.publishData(
-        new TextEncoder().encode(JSON.stringify({ type: "sync" })),
+        new TextEncoder().encode(
+          JSON.stringify({ type: "sync", turnId: p.turnId }),
+        ),
         { reliable: true },
       );
+    }
   }
   interrupt() {
     this.progress.stop(true);

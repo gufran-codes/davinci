@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { voiceStatusPacket } from "../agents/protocol";
+import { voiceStatusPacket, voiceEndDelay } from "../agents/protocol";
+
+test("voice endpoint delay is configurable with bounded, safe defaults", () => {
+  for (const value of [undefined, "", " ", "invalid", "Infinity"])
+    assert.equal(voiceEndDelay(value), 1200);
+  assert.equal(voiceEndDelay("2200"), 2200);
+  assert.equal(voiceEndDelay("-1"), 800);
+  assert.equal(voiceEndDelay("999999"), 4000);
+});
 
 test("worker can publish initializing/listening before greeting loads, then tag teaching turns", () => {
   const packets = [

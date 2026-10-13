@@ -240,7 +240,9 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
       onTranscript: (text: string) => {
         if (epoch === connectionEpoch.current) sendRef.current(text, "voice");
       },
-      onInterim: setInterim,
+      onInterim: (text: string) => {
+        if (epoch === connectionEpoch.current) setInterim(text);
+      },
       onStatus: (next: VoiceStatus) => {
         if (epoch !== connectionEpoch.current) return;
         if (next === "listening" && current.current.state === "COMPLETE") {
@@ -251,8 +253,24 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
         setStatus(next);
         if (next === "speaking") setWords((count) => Math.max(0, count));
         if (next === "unavailable") {
+          // Retire this attempt immediately. Its pending connect promise or late
+          // callbacks must not keep retry locked or reactivate a dead transport.
+          connectionEpoch.current++;
+          connecting.current = false;
           active.current = false;
+          const failed = transport.current;
+          transport.current = null;
+          failed?.disconnect();
           setVoice(false);
+          setPlaybackBlocked(false);
+          setAudioLevel(0);
+          setWords(Number.MAX_SAFE_INTEGER);
+          setShowText(true);
+          setError(
+            (message) =>
+              message ||
+              "Voice disconnected. Your lesson is saved; reconnect to try again.",
+          );
         }
       },
       onPlaybackBlocked: (blocked: boolean) => {
@@ -263,6 +281,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
           setWords(count);
       },
       onReceipt: (receipt: SpeechReceipt) => {
+        if (epoch !== connectionEpoch.current) return;
         heard.current = receipt;
         void api(`/api/sessions/${current.current.id}/speech`, receipt).catch(
           () => {},
@@ -276,9 +295,13 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
       onInterrupt: () => {
         if (epoch === connectionEpoch.current) setStatus("listening");
       },
-      onMetric: (metric: VoiceLatencyMetric) =>
-        setLatency((current) => [...current.slice(-7), metric]),
-      onAudioLevel: setAudioLevel,
+      onMetric: (metric: VoiceLatencyMetric) => {
+        if (epoch === connectionEpoch.current)
+          setLatency((current) => [...current.slice(-7), metric]);
+      },
+      onAudioLevel: (level: number) => {
+        if (epoch === connectionEpoch.current) setAudioLevel(level);
+      },
     };
     try {
       const config = await api<{
@@ -444,7 +467,7 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                       {p?.teachingMove === "ask_reasoning"
                         ? "Your choice is saved. Tell Da Vinci what helped you decide, or type your reasoning below."
                         : p?.teachingMove === "guided_step"
-                          ? "First, work through the current step on the canvas. These choices answer the full problem."
+                          ? "Work through the canvas step, or answer the full problem by saying a letter, reading a choice, or selecting it here."
                           : session.question.choiceMode === "writing_support"
                             ? "These are starting ideas. You will still write or say your own response."
                             : "Compare the choices. Say a letter, tap an option, or explain your answer."}
@@ -475,7 +498,6 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                           disabled={
                             busy ||
                             finishing ||
-                            p?.teachingMove === "guided_step" ||
                             p?.teachingMove === "ask_reasoning"
                           }
                           onClick={() =>
@@ -504,7 +526,6 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
                     className="button choice-submit"
                     disabled={
                       busy ||
-                      p?.teachingMove === "guided_step" ||
                       p?.teachingMove === "ask_reasoning" ||
                       selectedChoice.questionId !== session.question.id ||
                       !selectedChoice.value
@@ -645,6 +666,19 @@ export function ConversationLesson({ initial }: { initial: PublicSession }) {
           <p className="spoken-turn" aria-live={voice ? "off" : "polite"}>
             {p?.spokenText ?? p?.text ?? session.question.prompt}
           </p>
+          {session.tutorService?.mode === "limited" && (
+            <p className="visual-caption" role="status">
+              Limited conversation: Da Vinci is using saved lesson explanations.
+              {session.tutorService.reason === "timeout"
+                ? " The AI response took too long. We’ll retry on a new message after a short pause."
+                : session.tutorService.reason === "credentials" ||
+                    session.tutorService.reason === "not_configured"
+                  ? " A parent needs to check the OpenAI API key."
+                  : session.tutorService.reason === "configuration"
+                    ? " A parent needs to check the selected model and API configuration."
+                    : " A parent can check the AI service connection to restore full conversation."}
+            </p>
+          )}
           {interim && <p className="child-transcript">“{interim}”</p>}
           {!complete && (
             <>

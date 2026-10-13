@@ -190,12 +190,20 @@ test("review can return to teaching with a different visible approach", () => {
 test("natural rapport and learner feedback receive contextual educator responses", () => {
   const f = setup();
   let s = f.say("Hey, can you hear me?");
-  assert.match(s.conversation!.text, /Yes, I can hear you/);
-  assert.match(s.conversation!.text, new RegExp(s.question.prompt));
+  assert.equal(s.conversation!.text, "Yes, I can hear you.");
+  assert.ok(
+    !s.conversation!.cues.some(
+      (cue) => cue.action === "question" && cue.label === s.question.prompt,
+    ),
+  );
   const previous = s.decision.strategy;
   s = f.say("You are stuck in the same loop.");
   assert.notEqual(s.decision.strategy, previous);
-  assert.match(s.conversation!.text, /repeating myself/);
+  assert.ok(s.conversation!.text.includes(s.teaching!.supportPlan!.message));
+  assert.doesNotMatch(
+    s.conversation!.text,
+    /repeating myself|change both the explanation/,
+  );
 });
 
 test("subject-aware guard replaces the stale story fallback and remembers recent tutor questions", () => {
@@ -234,7 +242,7 @@ test("subject-aware guard replaces the stale story fallback and remembers recent
 test("social turns feel conversational without being graded as attempts", () => {
   const f = setup();
   let s = f.say("How are you?");
-  assert.match(s.conversation!.spokenText!, /ready to learn with you/i);
+  assert.match(s.conversation!.spokenText!, /ready to help/i);
   assert.equal(s.attempts, 0);
   s = f.say("What is your name?");
   assert.match(s.conversation!.spokenText!, /Da Vinci/i);
@@ -448,25 +456,26 @@ test("mentioning a first step does not select the first multiple-choice answer",
   );
 });
 
-test("confusion changes representations, descends, then rebuilds upward", () => {
+test("confusion changes representations without abandoning the unresolved task", () => {
   const f = setup();
+  const original = f.session.question;
   let s = f.say("I don’t understand");
   assert.equal(s.decision.strategy, "visual_fraction_model");
   s = f.say("I still don’t understand");
   assert.equal(s.decision.strategy, "concrete_real_world_example");
   s = f.say("I still don’t get it");
-  assert.equal(s.state, "REMEDIATION");
-  assert.equal(s.teaching?.returnStack.length, 1);
-  assert.notEqual(s.question.conceptId, "equivalent_fractions");
-  const prerequisite = s.question.conceptId;
-  s = f.say(s.question.answer);
-  assert.equal(s.question.conceptId, "equivalent_fractions");
   assert.equal(s.teaching?.returnStack.length, 0);
-  assert.equal(s.assistance, 1);
-  assert.ok(learnerFor(f.child.id).states[prerequisite].assistedAttempts > 0);
+  assert.equal(s.question.prompt, original.prompt);
+  assert.equal(s.attempts, 0);
+  s = f.say(s.question.answer);
+  assert.notEqual(s.question.prompt, original.prompt);
+  assert.equal(s.teaching?.returnStack.length, 0);
+  assert.ok(
+    learnerFor(f.child.id).states[original.conceptId].assistedAttempts > 0,
+  );
 });
 
-test("several missing prerequisite levels are stored and recovered in order", () => {
+test("easier explanations do not replace the current assessment", () => {
   const f = setup("adding_unlike");
   let s = f.session;
   const skills = [s.question.conceptId];
@@ -474,16 +483,13 @@ test("several missing prerequisite levels are stored and recovered in order", ()
     s = f.say("Can we try an easier one?");
     skills.push(s.question.conceptId);
   }
-  assert.equal(new Set(skills).size, 4);
-  assert.equal(s.teaching?.returnStack.length, 3);
-  for (const id of skills.slice(0, -1).reverse()) {
-    s = f.say(s.question.answer);
-    assert.equal(s.question.conceptId, id);
-  }
+  assert.equal(new Set(skills).size, 1);
+  assert.equal(s.question.prompt, f.session.question.prompt);
+  assert.equal(s.attempts, 0);
   assert.equal(s.teaching?.returnStack.length, 0);
 });
 
-test("seven hints track levels and move to a prerequisite without supplying target answer", () => {
+test("seven hints track levels and keep the target without supplying its answer", () => {
   const f = setup("generate_equivalent");
   const q = f.session.question;
   for (let i = 1; i <= 6; i++) {
@@ -494,8 +500,8 @@ test("seven hints track levels and move to a prerequisite without supplying targ
   }
   const s = f.say("Give me a hint");
   assert.equal(s.teaching?.signals.hintCount, 7);
-  assert.equal(s.teaching?.returnStack.length, 1);
-  assert.notEqual(s.question.conceptId, q.conceptId);
+  assert.equal(s.teaching?.returnStack.length, 0);
+  assert.equal(s.question.id, q.id);
 });
 
 test("wait and clarification do not grade an answer or award mastery", () => {

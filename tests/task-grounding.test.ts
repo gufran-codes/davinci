@@ -12,7 +12,8 @@ process.env.OPENAI_API_KEY = "";
 const { register } = await import("../src/server/auth");
 const { createChild, saveSession, learnerFor, saveLearner, sessionById } =
   await import("../src/server/repository");
-const { startSession } = await import("../src/server/orchestrator");
+const { startSession, advanceSession } =
+  await import("../src/server/orchestrator");
 const { greeting, converse } = await import("../src/server/conversation");
 const { conversationTurn } = await import("../src/server/understanding");
 const { buildTeachingState } = await import("../src/server/provider");
@@ -23,6 +24,8 @@ const { applySupport } = await import("../src/lib/teaching/adaptive");
 const { interpretTaskUtterance } =
   await import("../src/lib/conversation/interpretation");
 const { responseQuality } = await import("../src/lib/conversation/grounding");
+const { interpreterContext, speakerContext } =
+  await import("../src/server/model-context");
 const { contentById } = await import("../src/lib/teaching/content");
 const { skillContentSchema } = await import("../content/curriculum/schema");
 const parent = register("QA", `${randomUUID()}@test.local`, "testing-password");
@@ -57,6 +60,128 @@ function fixture(target = "equivalent_fractions") {
   };
 }
 
+test("model context is smaller without losing task boundaries, lesson content or delivered references", async () => {
+  const f = fixture();
+  f.say("I understand the pieces but not why the total stays the same");
+  const state = buildTeachingState(f.session, learnerFor(f.child.id), {
+    grade: 4,
+    age: 9,
+  });
+  const input = {
+    transcript: "Why?",
+    question: f.session.question.prompt,
+    choices: f.session.question.choices,
+    state,
+    history: [],
+  };
+  const compact = interpreterContext(input);
+  assert.ok(JSON.stringify(compact).length < JSON.stringify(input).length / 2);
+  assert.equal(compact.question, input.question);
+  assert.equal(
+    compact.state.academicContext.dialogueMemory?.activeGapId,
+    f.session.teaching!.dialogue!.activeGapId,
+  );
+  assert.doesNotMatch(
+    JSON.stringify(compact),
+    /expectedAnswer|solutionReasoning|approvedDraft/,
+  );
+  let checked = false;
+  await conversationTurn(
+    f.child,
+    f.session.id,
+    {
+      requestId: randomUUID(),
+      version: f.session.version,
+      transcript: "Please explain the whole again",
+      source: "text",
+    },
+    undefined,
+    {
+      async render(input) {
+        const result = speakerContext(input);
+        assert.ok(
+          JSON.stringify(result).length < JSON.stringify(input).length * 0.8,
+        );
+        assert.equal(
+          result.responsePlan!.task.questionId,
+          input.responsePlan!.task.questionId,
+        );
+        assert.equal(
+          result.responsePlan!.teachingBrief,
+          input.responsePlan!.teachingBrief,
+        );
+        assert.equal(
+          result.state.academicContext.lessonInstruction,
+          input.state.academicContext!.lessonInstruction,
+        );
+        assert.equal(result.prohibitedAnswer, input.prohibitedAnswer);
+        assert.equal(result.draft, input.draft);
+        assert.equal(result.state.academicContext.responsePlan, undefined);
+        checked = true;
+        return input.draft;
+      },
+    },
+  );
+  assert.equal(checked, true);
+});
+
+test("replayed and stale semantic requests never call a model again", async () => {
+  const f = fixture();
+  const input = {
+    requestId: randomUUID(),
+    version: f.session.version,
+    transcript: "Why does the amount stay the same?",
+    source: "text" as const,
+  };
+  let interpreted = 0,
+    rendered = 0;
+  const adapter = {
+    async understand() {
+      interpreted++;
+      return { intent: "why" as const };
+    },
+  };
+  const speaker = {
+    async render(
+      input: Parameters<
+        import("../src/server/understanding").ConversationSpeaker["render"]
+      >[0],
+    ) {
+      rendered++;
+      return input.draft;
+    },
+  };
+  const next = await conversationTurn(
+    f.child,
+    f.session.id,
+    input,
+    adapter,
+    speaker,
+  );
+  assert.equal(interpreted, 1);
+  const renderCount = rendered;
+  const replay = await conversationTurn(
+    f.child,
+    f.session.id,
+    input,
+    adapter,
+    speaker,
+  );
+  assert.equal(replay.version, next.version);
+  await assert.rejects(
+    conversationTurn(
+      f.child,
+      f.session.id,
+      { ...input, requestId: randomUUID() },
+      adapter,
+      speaker,
+    ),
+    { status: 409 },
+  );
+  assert.equal(interpreted, 1);
+  assert.equal(rendered, renderCount);
+});
+
 test("interpretation uses the active step; ambiguous answers never alter mastery", () => {
   const f = fixture();
   assert.equal(
@@ -74,7 +199,8 @@ test("interpretation uses the active step; ambiguous answers never alter mastery
   );
   f.say("Walk me through this step by step");
   const s = f.session;
-  assert.equal(interpretTaskUtterance("B", s).needsClarification, true);
+  assert.equal(interpretTaskUtterance("B", s).answer, s.question.choices![1]);
+  assert.equal(interpretTaskUtterance("B", s).answerTarget, "task");
   assert.equal(interpretTaskUtterance("two", s).answer, "2");
   const context = buildTeachingState(s, learnerFor(f.child.id), {
     grade: 4,
@@ -86,6 +212,41 @@ test("interpretation uses the active step; ambiguous answers never alter mastery
   );
   assert.ok(context.academicContext!.rubric);
   assert.ok(context.academicContext!.canvasActions);
+});
+
+test("voice letters and full labels bypass a guided checkpoint and advance once", async () => {
+  for (const mode of ["letter", "label"] as const) {
+    const f = fixture(
+      mode === "letter" ? "equivalent_fractions" : "g4_science_matter",
+    );
+    f.say("Walk me through this step by step");
+    const before = f.session;
+    const choice = before.question.answer;
+    const transcript =
+      mode === "letter"
+        ? String.fromCharCode(65 + before.question.choices!.indexOf(choice))
+        : before.question.choiceLabels![choice];
+    let interpreted = 0;
+    const input = {
+      requestId: randomUUID(),
+      version: before.version,
+      transcript,
+      source: "voice" as const,
+    };
+    const next = await conversationTurn(f.child, before.id, input, {
+      async understand() {
+        interpreted++;
+        throw new Error("Literal choices need no model interpretation");
+      },
+    });
+    assert.equal(interpreted, 0);
+    assert.equal(next.conversation!.assessment!.correct, true);
+    assert.notEqual(next.question.id, before.question.id);
+    assert.equal(next.conversation!.assessment!.questionId, before.question.id);
+    const replayed = await conversationTurn(f.child, before.id, input);
+    assert.equal(replayed.version, next.version);
+    assert.equal(replayed.question.id, next.question.id);
+  }
 });
 
 test("a checked answer retains the input task when the next question is shown", () => {
@@ -108,6 +269,146 @@ test("a checked answer retains the input task when the next question is shown", 
       .questionId,
     input.id,
   );
+});
+
+test("consecutive correct answers advance with concise feedback rather than catchphrases", () => {
+  const f = fixture("g4_math_addition");
+  for (let index = 0; index < 3; index++) {
+    const previous = f.session.question;
+    const next = f.say(previous.answer);
+    assert.notEqual(next.question.id, previous.id);
+    assert.equal(
+      next.conversation!.assessment!.explanation,
+      previous.explanation,
+    );
+    assert.equal(next.conversation!.teachingMove, "acknowledge_and_advance");
+    assert.ok(next.conversation!.spokenText!.includes(next.question.prompt));
+    assert.doesNotMatch(
+      next.conversation!.spokenText!,
+      /build on|see what you think|take your time|what do you notice|say.*continue/i,
+    );
+    assert.ok(
+      next.conversation!.spokenText!.split(/\s+/).length <=
+        next.question.prompt.split(/\s+/).length + 14,
+    );
+  }
+});
+
+test("incorrect-answer feedback does not expose the solution explanation", () => {
+  const f = fixture("g4_math_addition");
+  const q = f.session.question;
+  const next = f.say(q.choices!.find((choice) => choice !== q.answer)!);
+  assert.equal(next.conversation!.assessment!.correct, false);
+  assert.equal(next.conversation!.assessment!.explanation, undefined);
+});
+
+test("stock model feedback is repaired once, then falls back to the approved turn", async () => {
+  for (const repair of [true, false]) {
+    const f = fixture("g4_math_addition");
+    const previous = f.session;
+    let calls = 0;
+    const next = await conversationTurn(
+      f.child,
+      previous.id,
+      {
+        requestId: randomUUID(),
+        version: previous.version,
+        transcript: "999999",
+        source: "canvas",
+      },
+      undefined,
+      {
+        async render(input) {
+          calls++;
+          if (calls === 2)
+            assert.ok(input.correction!.checks.includes("stock_transition"));
+          return repair && calls === 2
+            ? input.draft
+            : `Let's build on it. ${input.responsePlan!.requiredQuestion}`;
+        },
+      },
+    );
+    assert.equal(calls, 2);
+    assert.equal(next.teaching!.lastTurnTrace!.quality!.usedFallback, !repair);
+    assert.doesNotMatch(
+      next.conversation!.spokenText!,
+      /build on|pause on one idea/,
+    );
+    assert.equal(next.conversation!.assessment!.correct, false);
+    assert.equal(next.question.prompt, previous.question.prompt);
+  }
+});
+
+test("the speaker receives delivered dialogue without the unheard tail or current draft", async () => {
+  const f = fixture();
+  const previous = f.session;
+  const spokenPrefix = (
+    previous.conversation!.spokenText ?? previous.conversation!.text
+  )
+    .split(" ")
+    .slice(0, 4)
+    .join(" ");
+  let called = false;
+  await conversationTurn(
+    f.child,
+    previous.id,
+    {
+      requestId: randomUUID(),
+      version: previous.version,
+      transcript: "Why does the amount stay the same?",
+      source: "voice",
+      heard: {
+        turnId: previous.conversation!.turnId,
+        spokenText: spokenPrefix,
+        interrupted: true,
+      },
+    },
+    undefined,
+    {
+      async render(input) {
+        called = true;
+        assert.equal(input.recentDialogue!.length, 1);
+        assert.equal(input.recentDialogue![0].spoken_tutor_text, spokenPrefix);
+        assert.equal(input.recentDialogue![0].interrupted, 1);
+        assert.equal(
+          input.studentUtterance,
+          "Why does the amount stay the same?",
+        );
+        assert.ok(input.draft.length > 0);
+        return input.draft;
+      },
+    },
+  );
+  assert.equal(called, true);
+});
+
+test("an explicit repeat preserves the saved wording without model rewriting", async () => {
+  const f = fixture();
+  const s = f.session;
+  let rendered = false;
+  const next = await conversationTurn(
+    f.child,
+    s.id,
+    {
+      requestId: randomUUID(),
+      version: s.version,
+      transcript: "Please repeat that",
+      source: "voice",
+    },
+    undefined,
+    {
+      async render() {
+        rendered = true;
+        return "A different explanation.";
+      },
+    },
+  );
+  assert.equal(rendered, false);
+  assert.equal(
+    next.conversation!.spokenText,
+    s.conversation!.text.replace(/\s+/g, " ").trim(),
+  );
+  assert.equal(next.attempts, s.attempts);
 });
 
 test("one regeneration repairs unrelated speech; failed repair keeps the grounded draft", async () => {
@@ -284,7 +585,7 @@ test("choice schema rejects duplicate choices and answer keys absent from the op
   assert.equal(skillContentSchema.safeParse(content).success, false);
 });
 
-test("long choice labels and letters preserve grading values; a selection asks for reasoning", async () => {
+test("long choice labels preserve grading values and advance without a reasoning gate", async () => {
   const f = fixture("g4_math_addition");
   const s = f.session;
   assert.equal(
@@ -304,8 +605,9 @@ test("long choice labels and letters preserve grading values; a selection asks f
     source: "canvas",
     transcript: s.question.answer,
   });
-  assert.equal(next.teaching!.awaitingReasoning, true);
-  assert.equal(next.conversation!.teachingMove, "ask_reasoning");
+  assert.equal(next.teaching!.awaitingReasoning, false);
+  assert.notEqual(next.question.id, s.question.id);
+  assert.notEqual(next.conversation!.teachingMove, "ask_reasoning");
   assert.equal(
     learnerFor(f.child.id).states[s.question.conceptId]
       .successfulIndependentAttempts,
@@ -320,13 +622,103 @@ test("long choice labels and letters preserve grading values; a selection asks f
 
 test("spoken option aliases earn recognition credit rather than independent mastery", () => {
   const f = fixture("g4_math_addition");
+  const originalQuestion = f.session.question.id;
   const index = f.session.question.choices!.indexOf(f.session.question.answer);
   const next = f.say(`Option ${String.fromCharCode(65 + index)}`);
-  assert.equal(next.teaching!.awaitingReasoning, true);
+  assert.equal(next.teaching!.awaitingReasoning, false);
+  assert.notEqual(next.question.id, originalQuestion);
   assert.equal(
     learnerFor(f.child.id).states[next.question.conceptId].evidence.at(-1)!
       .outcome,
     "recognition_success",
+  );
+});
+
+test("natural correct-option phrases advance in one turn without model reinterpretation", async () => {
+  for (const target of ["g4_math_addition", "g4_science_matter"]) {
+    const f = fixture(target);
+    const q = f.session.question;
+    const letter = String.fromCharCode(65 + q.choices!.indexOf(q.answer));
+    for (const phrase of [
+      `The correct option is ${letter}`,
+      `My answer is "${q.answer}"`,
+    ])
+      assert.equal(interpretTaskUtterance(phrase, f.session).answer, q.answer);
+    let interpreted = false;
+    const next = await conversationTurn(
+      f.child,
+      f.session.id,
+      {
+        requestId: randomUUID(),
+        version: f.session.version,
+        source: "voice",
+        transcript: `The correct option is ${letter}`,
+      },
+      {
+        understand: async () => {
+          interpreted = true;
+          throw Error("Literal choice must bypass model");
+        },
+      },
+    );
+    assert.equal(interpreted, false);
+    assert.notEqual(next.question.id, q.id);
+    assert.equal(next.teaching!.awaitingReasoning, false);
+    assert.equal(next.conversation!.assessment!.questionId, q.id);
+    assert.equal(next.conversation!.assessment!.correct, true);
+    assert.doesNotMatch(
+      next.conversation!.spokenText!,
+      /why.*choose|helped you decide|say.*continue/i,
+    );
+  }
+});
+
+test("an older saved reasoning gate advances without grading the answer twice", () => {
+  const f = fixture("g4_math_addition");
+  let saved = advanceSession(f.child, f.session.id, {
+    action: "answer",
+    version: f.session.version,
+    answer: f.session.question.answer,
+    responseMode: "selected",
+  });
+  saved.teaching!.awaitingReasoning = true;
+  saveSession(saved);
+  const before = JSON.stringify(learnerFor(f.child.id));
+  const originalQuestion = saved.question.id;
+  saved = converse(f.child, saved.id, {
+    requestId: randomUUID(),
+    version: saved.version,
+    source: "voice",
+    transcript: `The correct option is ${String.fromCharCode(65 + saved.question.choices!.indexOf(saved.question.answer))}`,
+  });
+  assert.notEqual(saved.question.id, originalQuestion);
+  assert.equal(saved.teaching!.awaitingReasoning, false);
+  assert.equal(JSON.stringify(learnerFor(f.child.id)), before);
+});
+
+test("conceptual depth requires a request, and success cannot be turned back into a reasoning gate", () => {
+  const f = fixture();
+  const s = f.session;
+  s.conversation!.intent = "why";
+  const explanation =
+    "Equal pieces name a common unit. " +
+    "When the whole stays fixed, splitting every piece changes the count and size together, not the amount selected. ".repeat(
+      4,
+    );
+  assert.ok(explanation.split(/\s+/).length > 65);
+  assert.ok(responseQuality(s, explanation).includes("voice_length"));
+  s.teaching!.lastUtterance = "Explain in detail why the amount stays the same";
+  assert.ok(!responseQuality(s, explanation).includes("voice_length"));
+  s.conversation!.assessment = {
+    questionId: "previous",
+    prompt: "Previous task",
+    answer: "a",
+    correct: true,
+  };
+  assert.ok(
+    responseQuality(s, "That fits. What helped you decide?").includes(
+      "unnecessary_reasoning_gate",
+    ),
   );
 });
 

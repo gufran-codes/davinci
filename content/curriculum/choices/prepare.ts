@@ -1,5 +1,6 @@
 import { gradeAnswer } from "../../../src/lib/math";
 import { alternatives, binaryClaims } from "./contrasts";
+import { choiceLabel } from "../../../src/lib/conversation/choice-label";
 
 type Item = {
   prompt: string;
@@ -29,8 +30,8 @@ export function cleanQuestion<T extends Item>(item: T): T {
   if (q.context === q.explanation) q.context = q.prompt;
   return q;
 }
-function labelFor(value: string, q: Item, subject: string) {
-  if (q.choiceLabels?.[value]) return q.choiceLabels[value];
+function labelFor(value: string, q: Item) {
+  if (q.choiceLabels?.[value]) return choiceLabel(value, q.choiceLabels[value]);
   if (/^(yes|no)$/i.test(value)) {
     const claim = binaryClaims.find(([match]) =>
       q.prompt.toLowerCase().includes(match),
@@ -45,60 +46,7 @@ function labelFor(value: string, q: Item, subject: string) {
       ? "Yes — the relationship in the question is true."
       : "No — the relationship in the question is not true.";
   }
-  if (/^-?\d+(?:\.\d+)?(?:\/\d+)?$/.test(value)) {
-    if (value.includes("/")) return `The fraction is ${value} of one whole.`;
-    if (/numerator/i.test(q.prompt)) return `The numerator would be ${value}.`;
-    if (/denominator/i.test(q.prompt))
-      return `The denominator would be ${value}.`;
-    if (/how many (?:equal )?(?:groups|trays)\b/i.test(q.prompt))
-      return `There would be ${value} equal groups.`;
-    if (
-      /how many[^?]*(?:in each|per group)|each[^?]*(?:get|receive)/i.test(
-        q.prompt,
-      )
-    )
-      return `Each group would contain ${value}.`;
-    if (/year|comes earlier/i.test(q.prompt))
-      return `The earlier year would be ${value}.`;
-    if (/visitor/i.test(q.prompt))
-      return `The count would be ${value} visitors.`;
-    if (/centimetres|in cm/i.test(q.prompt))
-      return `The measurement would be ${value} centimetres.`;
-    if (/mass.*grams|in grams/i.test(q.prompt))
-      return `The mass would be ${value} grams.`;
-    if (/liters|litres/i.test(q.prompt))
-      return `The amount would be ${value} litres.`;
-    if (/books/i.test(q.prompt)) return `There would be ${value} books in all.`;
-    if (/seedlings/i.test(q.prompt))
-      return `There would be ${value} seedlings in all.`;
-    if (/x|equation|solve/i.test(q.prompt))
-      return `The value that fits would be ${value}.`;
-    return `The result would be ${value}.`;
-  }
-  if (value.length >= 38 || /[.!?]$/.test(value)) return value;
-  if (/^x [<>]/.test(value)) return `The solution values satisfy ${value}.`;
-  if (
-    /which word|what prefix|what.*root|tense|choose:|in .*which/i.test(q.prompt)
-  )
-    return `Use “${value}” to complete the language task.`;
-  if (/mean|opposite/i.test(q.prompt))
-    return `The meaning that fits here is “${value}”.`;
-  if (/sense|body part|organs|system|structure/i.test(q.prompt))
-    return `The part or system involved is ${value}.`;
-  if (/main idea|mainly|main topic/i.test(q.prompt))
-    return `The main idea is about ${value}.`;
-  if (
-    /what happens first|what comes after|before cooling|brief pause/i.test(
-      q.prompt,
-    )
-  )
-    return `The point in the sequence is “${value}”.`;
-  if (subject === "Math") return `The description that fits is “${value}”.`;
-  if (subject === "English")
-    return `The text supports this interpretation: ${value}.`;
-  if (subject === "Science")
-    return `The explanation I would choose is: ${value}.`;
-  return `The evidence supports this choice: ${value}.`;
+  return value;
 }
 
 /** Prepared data only: no live LLM invents distractors or changes answer keys.
@@ -166,7 +114,7 @@ export function prepareChoices<T extends Item>(
     choices = [...choices.slice(offset), ...choices.slice(0, offset)];
   }
   const choiceLabels = Object.fromEntries(
-    choices.map((value) => [value, labelFor(value, q, subject)]),
+    choices.map((value) => [value, labelFor(value, q)]),
   );
   return {
     ...q,

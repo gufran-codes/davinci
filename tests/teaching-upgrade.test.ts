@@ -104,6 +104,50 @@ test("disabled and immediate controls persist separately per child", () => {
   b.say("tell me the answer");
   assert.equal(b.s.teaching?.revealedQuestions.length, 1);
 });
+
+test("hints, easier explanations, refresh and social turns never reset reveal attempts or skip an unresolved item", () => {
+  const f = setup();
+  const original = f.s.question.prompt;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    f.say("my answer is 999/1000");
+    for (const support of [
+      "Give me a hint",
+      "show me",
+      "make it easier",
+      "How are you?",
+      "continue",
+    ]) {
+      f.say(support);
+      assert.equal(f.s.question.prompt, original, support);
+      assert.equal(answerAccess(f.s).attempts, attempt, support);
+      assert.equal(answerAccess(f.s).remaining, 3 - attempt, support);
+    }
+  }
+  assert.equal(answerAccess(f.s).allowed, true);
+  const revealed = f.say("show me the answer");
+  assert.equal(revealed.question.prompt, original);
+  assert.equal(answerAccess(f.s).revealed, true);
+  assert.match(revealed.conversation!.spokenText!, /The answer is/);
+  const next = f.say("continue");
+  assert.notEqual(next.question.prompt, original);
+  assert.equal(next.attempts, 3, "Showing a solution is not a correct answer");
+});
+
+test("legacy multi-segment question ids keep one attempt ledger across retries", () => {
+  const f = setup();
+  const s = f.s;
+  s.question.id = "equivalent_fractions:legacy:variant:one";
+  delete s.question.assessmentKey;
+  saveSession(s);
+  f.say("999/1000");
+  f.say("give me a hint");
+  f.say("999/1000");
+  assert.equal(answerAccess(f.s).attempts, 2);
+  assert.equal(
+    f.s.question.assessmentKey,
+    "equivalent_fractions:legacy:variant:one",
+  );
+});
 test("voice choices resolve letters, ordinals and quantities; distractors diagnose without confirmation", () => {
   const q = getQuestion("equivalent_fractions", 0);
   assert.deepEqual(q.choices, ["1/4", "2/4", "2/3", "3/4"]);

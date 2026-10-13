@@ -1,6 +1,13 @@
 import type { LearningSession } from "../types";
 import { dialogueFocus } from "./dialogue";
-import { spokenMath, understandLocally, type UnderstoodTurn } from "./intent";
+import { resolveSpokenChoice } from "./choice-resolution";
+import {
+  choiceClaim,
+  requestsSessionEnd,
+  spokenMath,
+  understandLocally,
+  type UnderstoodTurn,
+} from "./intent";
 
 export function interpretTaskUtterance(
   transcript: string,
@@ -8,10 +15,32 @@ export function interpretTaskUtterance(
   source: "voice" | "text" | "canvas" = "voice",
 ): UnderstoodTurn {
   const text = transcript.trim();
+  if (requestsSessionEnd(text)) return { intent: "end_session" };
   const focus = dialogueFocus(session);
+  const choice = resolveSpokenChoice(text, session.question);
+  if (
+    choice &&
+    "answer" in choice &&
+    (focus.kind === "answer" || choice.explicit || source === "canvas")
+  )
+    return {
+      intent: "answer",
+      answer: choice.answer,
+      selectedChoice: choice.selected,
+      answerTarget: "task",
+      ambiguity: "clear",
+    };
+  if (choice && "ambiguous" in choice)
+    return {
+      intent: "off_topic",
+      ambiguity: "ambiguous",
+      needsClarification: true,
+    };
   const explicit =
     source === "canvas" ||
-    /^(?:my answer is|the answer is|i choose|i pick|option)\b/i.test(text);
+    /^(?:(?:my|the) (?:correct )?(?:answer|option|choice) is|i choose|i pick|option)\b/i.test(
+      text,
+    );
   const useChoices =
     focus.kind === "answer" ||
     focus.kind === "reflection" ||
@@ -19,11 +48,7 @@ export function interpretTaskUtterance(
   const question = useChoices
     ? session.question
     : { ...session.question, choices: undefined };
-  const norm = (value: string) =>
-    value
-      .trim()
-      .toLowerCase()
-      .replace(/[.!?]+$/, "");
+  const norm = choiceClaim;
   const [claim, ...reason] = text.split(/\b(?:because|since)\b/i);
   const labelMatch =
     useChoices &&
@@ -94,12 +119,12 @@ export function interpretTaskUtterance(
       return unclear();
   }
   if (!useChoices && /^(?:option )?[a-f][.!?]*$/i.test(text)) return unclear();
-  // Unknown prose cannot be silently treated as a mathematical answer. Let the
-  // interpreter resolve it, or ask a task-specific clarification when offline.
+  // Unknown prose is not an ambiguous option selection. Keep it conversational
+  // unless actual competing choices/unclear answer references were detected.
   if (
     local.intent === "off_topic" &&
     !/[?]|\b(?:why|what|how|explain|tell)\b/i.test(text)
   )
-    return unclear();
+    return { intent: "off_topic", ambiguity: "clear" };
   return { ...local, ambiguity: "clear" };
 }

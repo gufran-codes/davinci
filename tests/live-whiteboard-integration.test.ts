@@ -18,6 +18,7 @@ const { greeting, converse, replaceTutorSpeech } =
 const { chooseDecision } = await import("../src/lib/learning");
 const { canvasActionSchema } = await import("../src/lib/teaching/whiteboard");
 const { publicSession } = await import("../src/server/provider");
+const { getQuestion } = await import("../src/lib/curriculum");
 
 test("a real science support turn draws only the source food chain, persists it and retimes final wording", async () => {
   const parent = register(
@@ -33,6 +34,8 @@ test("a real science support turn draws only the source food chain, persists it 
     subjects: ["Science"],
   });
   let session = startSession(child, "lesson", "g3_science_ecosystems");
+  // Practice has a passage already: that must not suppress the source diagram.
+  session.question = getQuestion("g3_science_ecosystems", 1);
   session.assistance = 1;
   session.decision = chooseDecision(
     learnerFor(child.id),

@@ -63,6 +63,36 @@ Da Vinci teaches, never what counts as correct.
 
 ## AI configuration and mock mode
 
+The balanced configuration in `.env.example` uses `OPENAI_INTERPRETER_MODEL=gpt-6-luna`
+for semantic extraction and `OPENAI_TUTOR_MODEL=gpt-6.1-sol` for teaching.
+Role overrides take precedence over `OPENAI_MODEL`; existing explicit overrides
+are preserved. Restart the app and voice worker after changing local configuration.
+Simple, checked correct answers use the existing acknowledgement/transition without
+a model rewrite. Compound questions and unresolved doubts still use the tutor.
+Model context is compacted while preserving task boundaries and teaching content.
+
+`PRIMER_VOICE_END_DELAY_MS` tunes LiveKit pause detection (default 1200 ms,
+bounded to 800–4000 ms). Increase it if the tutor interrupts thinking pauses.
+The browser speech fallback keeps its separate timing. Generated explanations
+are validated as complete turns before speech; early model-to-audio streaming
+is not enabled by this optimization.
+
+Conversation model requests, including repair calls, emit `model_usage` session
+events with role, request ID, elapsed time, token counts, and estimated USD.
+No prompts, keys, or student text are copied into usage metadata. Estimates use
+[OpenAI Standard pricing](https://developers.openai.com/api/docs/pricing)
+checked on 2026-10-10 and are not invoices: unknown models/tiers, unavailable
+usage and long-context pricing return unknown cost. Voice services, homework,
+and the legacy lesson renderer are not included. Existing event retention and
+account deletion apply. The opt-in synthetic check supports `--limit=2`:
+
+```bash
+node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx scripts/dialogue-smoke.ts --limit=2
+```
+
+This command makes billable requests and prints per-turn timing/usage, using
+a fresh temporary database rather than real student sessions.
+
 The browser uses built-in speech services when the realtime provider block is
 not configured. With LiveKit configured, the worker uses Deepgram for STT and
 Cartesia for TTS. Both transports call the same Da Vinci conversation policy;

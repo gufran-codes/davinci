@@ -1,14 +1,29 @@
 "use client";
 
-import { useId, useState, type CSSProperties } from "react";
+import {
+  useId,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from "react";
 import type { CanvasAction } from "@/lib/teaching/whiteboard";
 import styles from "./live-whiteboard.module.css";
+import { SourceScenes } from "./source-scenes";
+import { HandwrittenNote } from "./handwritten-note";
+import { AtomicScene } from "./atomic-scene";
 
 type NodeAction = Extract<CanvasAction, { type: "drawDiagramNode" }>;
 const position = (index: number) => ({
   x: 20 + (index % 2) * 300,
   y: 20 + Math.floor(index / 2) * 200,
 });
+const smallScreen = () => window.matchMedia("(max-width: 600px)").matches;
+const serverScreen = () => false;
+const subscribeScreen = (notify: () => void) => {
+  const media = window.matchMedia("(max-width: 600px)");
+  media.addEventListener("change", notify);
+  return () => media.removeEventListener("change", notify);
+};
 
 function Diagram({
   nodes,
@@ -22,6 +37,11 @@ function Diagram({
   onInspect?: (label: string) => void;
 }) {
   const marker = useId().replace(/:/g, "");
+  const narrow = useSyncExternalStore(
+    subscribeScreen,
+    smallScreen,
+    serverScreen,
+  );
   const [selected, setSelected] = useState<string>();
   const selectedNode = nodes.find(
     (node) => node.id === selected && active.has(node.id),
@@ -30,11 +50,16 @@ function Diagram({
     (a) =>
       a.type === "connectDiagramNodes" && a.diagramId === nodes[0].diagramId,
   );
+  const vertical =
+    narrow || links.some((a) => a.type === "connectDiagramNodes" && a.label);
+  const locate = (index: number) =>
+    vertical ? { x: 30, y: 20 + index * 230 } : position(index);
   return (
     <figure className={styles.diagram}>
       <figcaption>{nodes[0].title}</figcaption>
       <svg
-        viewBox={`0 0 600 ${Math.ceil(nodes.length / 2) * 200}`}
+        viewBox={`0 0 ${vertical ? 320 : 600} ${vertical ? nodes.length * 230 : Math.ceil(nodes.length / 2) * 200}`}
+        data-vertical={vertical}
         role="group"
         aria-label={nodes[0].title}
       >
@@ -57,12 +82,13 @@ function Diagram({
           if (
             fromIndex < 0 ||
             toIndex < 0 ||
+            !active.has(link.id) ||
             !active.has(link.fromId) ||
             !active.has(link.toId)
           )
             return null;
-          const from = position(fromIndex),
-            to = position(toIndex);
+          const from = locate(fromIndex),
+            to = locate(toIndex);
           const sameRow = from.y === to.y;
           const forward = to.x > from.x;
           const x1 = from.x + (sameRow ? (forward ? 260 : 0) : 130),
@@ -70,18 +96,30 @@ function Diagram({
           const x2 = to.x + (sameRow ? (forward ? -6 : 266) : 130),
             y2 = to.y + (sameRow ? 85 : -6);
           return (
-            <path
-              key={link.id}
-              className={styles.connector}
-              pathLength="1"
-              d={`M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}`}
-              markerEnd={`url(#${marker})`}
-            />
+            <g key={link.id}>
+              <path
+                className={styles.connector}
+                pathLength="1"
+                d={`M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}`}
+                markerEnd={`url(#${marker})`}
+              />
+              {link.label && (
+                <foreignObject
+                  className={styles.nodeEntrance}
+                  x={(x1 + x2) / 2 - 140}
+                  y={(y1 + y2) / 2 - 24}
+                  width="280"
+                  height="48"
+                >
+                  <div className={styles.relationshipLabel}>{link.label}</div>
+                </foreignObject>
+              )}
+            </g>
           );
         })}
         {nodes.map((node, i) => {
           if (!active.has(node.id)) return null;
-          const { x, y } = position(i);
+          const { x, y } = locate(i);
           return (
             <foreignObject
               key={node.id}
@@ -93,6 +131,7 @@ function Diagram({
             >
               <button
                 className={styles.node}
+                data-long-label={node.label.length > 80}
                 aria-pressed={selected === node.id}
                 onClick={() =>
                   setSelected(selected === node.id ? undefined : node.id)
@@ -159,6 +198,12 @@ export function LiveWhiteboard({
   const active = new Set(actions.map((a) => a.id));
   return (
     <div className={styles.surface}>
+      <SourceScenes actions={actions} plan={plan} onInspect={onInspect} />
+      {actions.map((action) =>
+        action.type === "showAtomModel" ? (
+          <AtomicScene key={action.id} action={action} />
+        ) : null,
+      )}
       {actions
         .filter((a) => a.type === "writeText")
         .map((a) => {
@@ -172,7 +217,7 @@ export function LiveWhiteboard({
               className={`${styles.writing} ${a.style === "calculation" ? styles.calculation : ""}`}
               data-whiteboard-writing={a.id}
             >
-              <WrittenText text={a.text} highlighted={highlights} />
+              <HandwrittenNote text={a.text} highlighted={highlights} />
             </p>
           );
         })}
@@ -183,7 +228,7 @@ export function LiveWhiteboard({
             key={id}
             nodes={group}
             active={active}
-            actions={actions}
+            actions={plan}
             onInspect={onInspect}
           />
         ) : null;

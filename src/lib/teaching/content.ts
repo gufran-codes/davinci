@@ -1,6 +1,7 @@
 import { prepareChoices } from "../../../content/curriculum/choices/prepare";
 import raw from "../../../content/curriculum/grades-1-5.json";
 import { secondaryCurriculum } from "../../../content/curriculum/secondary";
+import { deepenSkill } from "../../../content/curriculum/lesson-depth";
 import { skillContentSchema } from "../../../content/curriculum/schema";
 import type { Concept, Question, Visual } from "../types";
 import type { Rubric, TeachingMaterial } from "./types";
@@ -8,6 +9,7 @@ export const curriculumContent = skillContentSchema.array().parse(
   skillContentSchema
     .array()
     .parse([...raw, ...secondaryCurriculum])
+    .map(deepenSkill)
     .map((c) => ({
       ...c,
       questions: c.questions.map((q, i) => prepareChoices(q, c.subject, i)),

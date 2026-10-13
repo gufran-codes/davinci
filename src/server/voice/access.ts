@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { AccessToken, AgentDispatchClient } from "livekit-server-sdk";
 import { HttpError } from "../repository";
+import { reusableTutorDispatch } from "./dispatch";
 
 function voiceWorkerSecret() {
   return process.env.PRIMER_WORKER_SECRET ?? process.env.VOICE_WORKER_SECRET;
@@ -74,8 +75,19 @@ export async function connectVoice(
     process.env.LIVEKIT_API_KEY!,
     process.env.LIVEKIT_API_SECRET!,
   );
-  const existing = await dispatch.listDispatch(room).catch(() => []);
-  if (!existing.length)
+  const existing = await dispatch.listDispatch(room).catch((error: unknown) => {
+    // A new lesson may not have a room yet; an auth/network failure is not an
+    // empty dispatch list and must not silently launch duplicate tutors.
+    if (
+      error &&
+      typeof error === "object" &&
+      "status" in error &&
+      error.status === 404
+    )
+      return [];
+    throw error;
+  });
+  if (!existing.some(reusableTutorDispatch))
     await dispatch.createDispatch(room, "primer-tutor", {
       metadata: JSON.stringify({
         sessionId,

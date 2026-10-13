@@ -16,6 +16,7 @@ import {
   numberLineSequence,
 } from "../src/lib/teaching/whiteboard";
 import { guidedSteps } from "../src/lib/teaching/guided-steps";
+import { applySupport, spokenTeaching } from "../src/lib/teaching/adaptive";
 
 process.env.DATABASE_PATH = path.join(
   mkdtempSync(path.join(tmpdir(), "davinci-grounded-")),
@@ -92,6 +93,34 @@ test("fraction number-line coordinates preserve the numerical value", () => {
   const negative = numberLineSequence(2, -5)[0];
   assert.ok(negative.type === "showNumberLine");
   assert.equal(negative.min, -3);
+});
+
+test("repeated hints teach distinct task-grounded moves instead of cycling generic questions", () => {
+  const parent = register(
+    "QA",
+    `${randomUUID()}@test.local`,
+    "testing-password",
+  );
+  const child = createChild(parent.id, {
+    nickname: "QA",
+    age: 9,
+    grade: 4,
+    subjects: ["Math"],
+    goal: "Understand fractions",
+  });
+  const s = startSession(child, "lesson", "equivalent_fractions");
+  s.question = getQuestion("equivalent_fractions", 0);
+  const learner = learnerFor(child.id);
+  const messages: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    applySupport(s, learner, child, "hint");
+    messages.push(spokenTeaching(s).message.trim());
+  }
+  assert.equal(messages[0], s.question.hint);
+  assert.equal(new Set(messages).size, messages.length);
+  assert.ok(
+    messages.slice(1).some((text) => /pieces|multiplying|share/i.test(text)),
+  );
 });
 test("algebra guided steps are verified against the key and do not grade substeps as mastery", () => {
   const q = getQuestion("g7_math_two_step_equations", 0);

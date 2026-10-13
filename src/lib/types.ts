@@ -400,7 +400,7 @@ export interface TeachingState {
   scaffoldingLevel: number;
   sessionState: Phase;
   assessment: AssessmentType;
-  interactionRule: "ask_before_telling";
+  interactionRule: "ask_before_telling" | "explain_then_practice";
   teachingGoal?: {
     objective: string;
     successCriteria: string;

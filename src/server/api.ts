@@ -6,6 +6,7 @@ import {
   learningControlsSchema,
 } from "./learning-controls";
 import { conversationTurn, conversationalGreeting } from "./understanding";
+import { voiceTurnResponse } from "./voice/turn-stream";
 import { deliveredSpeech } from "./conversation";
 import { connectVoice, verifyWorkerToken } from "./voice/access";
 import { NextRequest, NextResponse } from "next/server";
@@ -179,6 +180,13 @@ export async function handle(req: NextRequest, path: string[]) {
         });
         return NextResponse.json({ ok: true });
       }
+      if (input.action === "turn" && req.headers.get("accept")?.includes("application/x-ndjson"))
+        return voiceTurnResponse(req.signal, child, access.sessionId, {
+          requestId: input.requestId ?? "",
+          version: input.version ?? -1,
+          transcript: input.transcript ?? "",
+          source: "voice",
+        });
       const session =
         input.action === "greet"
           ? await conversationalGreeting(child, access.sessionId)

@@ -1,7 +1,6 @@
 import { alignWhiteboard } from "../lib/teaching/whiteboard-playback";
 import {
   sessionIntelligence,
-  startDiagnosticProbe,
   finishDiagnosticProbe,
 } from "../lib/teaching/session-intelligence";
 import { randomUUID } from "node:crypto";
@@ -40,6 +39,13 @@ import {
 } from "./repository";
 import { all, one, run, transaction } from "./db";
 import {
+  applyVisualDirection,
+  applyTeachingNote,
+  buildTeachingScene,
+  workedExampleActions,
+  type VisualDirection,
+} from "../lib/teaching/scene-plan";
+import {
   guidedSteps,
   guidedActions,
   requestsGuidedSteps,
@@ -47,10 +53,20 @@ import {
 import { beginGuidedPractice, respondToGuidedStep } from "./guided-teaching";
 import { answerLessonQuestion } from "../lib/teaching/grounded-support";
 import { dialogueFocus } from "../lib/conversation/dialogue";
-import { interpretTaskUtterance } from "../lib/conversation/interpretation";
+import { boundedFallback } from "../lib/teaching/response-budget";
+import { routineReply } from "../lib/conversation/routine-turn";
+import { successBridge } from "../lib/teaching/progression";
+import { interpretStudentTurn } from "../lib/conversation/student-dialogue";
+import {
+  dialogueMemory,
+  explanationDraft,
+  planDialogue,
+  recordDialogueExplanation,
+} from "./dialogue";
 import {
   taskSnapshot,
   responsePlan,
+  responseQuality,
   type TurnTrace,
 } from "../lib/conversation/grounding";
 export interface ConversationInput {
@@ -88,14 +104,6 @@ function questionsIn(text: string) {
   return (text.match(/[^.!?]*\?/g) ?? [])
     .map((question) => question.trim())
     .filter(Boolean);
-}
-function choiceDirection(s: LearningSession) {
-  const choices = [
-    "Take a careful look at the choices before you decide.",
-    "Compare the choices, then pick the one that best fits your reasoning.",
-    "The choices are in your answer space. Check each one against the question.",
-  ];
-  return choices[memoryFor(s).responseOrdinal % choices.length];
 }
 function similarity(a: string, b: string) {
   const tokens = (value: string) =>
@@ -135,6 +143,12 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
   let speech = (p.spokenText ?? p.text).replace(/\s+/g, " ").trim();
   // Review and completion are lifecycle messages, not teaching questions.
   if (["SESSION_REVIEW", "COMPLETE"].includes(s.state)) {
+    if (
+      s.state === "SESSION_REVIEW" &&
+      p.assessment?.correct &&
+      !memoryFor(s).dialogue?.plan?.request
+    )
+      speech = `That’s correct. ${memoryFor(s).questionPoolExhausted ? "You’ve completed the available questions for this lesson. We can choose another lesson next." : speech}`;
     p.spokenText = speech;
     p.verification = {
       passed: true,
@@ -151,7 +165,20 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
   )
     checks.push("reflection_outside_review");
   let revised = false;
-  if (wordCount(speech) > 65) checks.push("too_many_tutor_words");
+  const plan = responsePlan(s, p);
+  // A repeat replays what was actually said, including a requested deep answer.
+  const limit =
+    p.intent === "repeat"
+      ? Math.max(plan.speechBudget.maxWords, wordCount(speech))
+      : plan.speechBudget.maxWords;
+  if (wordCount(speech) > limit) {
+    speech =
+      boundedFallback(speech, plan.speechBudget, plan.requiredQuestion) ||
+      boundedFallback(s.question.hint, plan.speechBudget) ||
+      "Tell me the word or step you want explained.";
+    revised = true;
+  }
+  if (wordCount(speech) > limit) checks.push("too_many_tutor_words");
   if ((speech.match(/\?/g) ?? []).length > 2) checks.push("too_many_questions");
   if (
     /\b(?:right\?|isn['’]t it\?|just tell me|all you need to do)\b/i.test(
@@ -180,8 +207,11 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
     p.teachingMove === "return_to_task" ||
     (s.conversation?.teachingMove === "guided_step" &&
       !memoryFor(s).guidedPractice);
+  const routineSocial =
+    p.intent === "rapport" && !!routineReply(memoryFor(s).lastUtterance ?? "");
   if (
     p.intent !== "repeat" &&
+    !routineSocial &&
     !memoryFor(s).guidedPractice &&
     !returningFromSteps &&
     !["SESSION_REVIEW", "COMPLETE"].includes(s.state) &&
@@ -214,6 +244,7 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
     checks.push("subject_irrelevant_question");
   if (
     memoryFor(s).guidedPractice &&
+    memoryFor(s).dialogue?.plan?.questionPolicy !== "none" &&
     !["wait", "rapport", "reveal", "define", "why", "confidence"].includes(
       p.intent,
     ) &&
@@ -236,13 +267,47 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
           .replace(/\s+/g, " ")
           .trim()
       : "";
-    const nextQuestion = memoryFor(s).guidedPractice
-      ? focusingQuestion(s)
-      : freshFocusingQuestion(s);
+    const noQuestion =
+      memoryFor(s).dialogue?.plan?.questionPolicy === "none" ||
+      memoryFor(s).dialogue?.plan?.mode === "social";
+    const nextQuestion = noQuestion
+      ? ""
+      : memoryFor(s).guidedPractice
+        ? focusingQuestion(s)
+        : freshFocusingQuestion(s);
     speech =
-      explanation && wordCount(`${explanation} ${nextQuestion}`) <= 65
+      explanation && wordCount(`${explanation} ${nextQuestion}`) <= limit
         ? `${explanation} ${nextQuestion}`
-        : `Let’s pause on one idea. ${nextQuestion}`;
+        : noQuestion
+          ? (memoryFor(s).dialogue?.plan?.fallback ??
+            "I need a little more detail to explain the part you mean.")
+          : nextQuestion;
+    revised = true;
+  }
+  if (
+    p.assessment?.correct &&
+    p.assessment.questionId !== s.question.id &&
+    !memoryFor(s).dialogue?.plan?.request
+  ) {
+    const prompt = focusingQuestion(s);
+    const lead = speech.includes(prompt)
+      ? speech.slice(0, speech.indexOf(prompt))
+      : "";
+    if (
+      !/\b(?:correct|right|yes|got (?:it|this)|well done|nice work)\b/i.test(
+        lead,
+      )
+    ) {
+      speech = `${successBridge(s, p.assessment.supportLevel)} ${prompt}`;
+      revised = true;
+    }
+  }
+  // An invalid draft may have selected another authored fallback above. Apply
+  // the same bound again so provider failures cannot restore a long monologue.
+  if (wordCount(speech) > limit) {
+    speech =
+      boundedFallback(speech, plan.speechBudget, plan.requiredQuestion) ||
+      "Tell me the word or step you want explained.";
     revised = true;
   }
   const finalQuestions = questionsIn(speech);
@@ -252,7 +317,10 @@ function verifyTutorTurn(s: LearningSession, p: ConversationPresentation) {
       ...memory.recentTutorQuestions,
       ...finalQuestions,
     ].slice(-12);
-    if (memory.checkpoint?.questionId === s.question.id) {
+    if (
+      memory.checkpoint?.questionId === s.question.id &&
+      memory.dialogue?.plan?.questionPolicy !== "none"
+    ) {
       // The student, interpreter, and canvas must all refer to the question
       // actually emitted after the guard (and optional wording renderer).
       memory.checkpoint.prompt = finalQuestions[finalQuestions.length - 1];
@@ -289,13 +357,39 @@ export function replaceTutorSpeech(
     version: number;
     spokenText: string;
     quality?: NonNullable<TurnTrace["quality"]>;
+    visualDirection?: VisualDirection | null;
+    teachingNote?: string | null;
+    stream?: {
+      expectedText: string;
+      first: boolean;
+      status: "streaming" | "complete" | "interrupted";
+      draft: string;
+    };
   },
 ) {
   return transaction(() => {
     const s = sessionById(id);
     if (s.childId !== child.id) throw new HttpError(404, "Lesson not found.");
-    if (s.version !== input.version || s.conversation?.turnId !== input.turnId)
+    if (s.version !== input.version || s.conversation?.turnId !== input.turnId) {
+      if (input.stream) throw new HttpError(409, "Speech turn is no longer active.");
       return s;
+    }
+    if (input.stream) {
+      const currentText = s.conversation.spokenText ?? s.conversation.text;
+      const delivered = one<{ spoken_tutor_text: string }>(
+        "SELECT spoken_tutor_text FROM conversation_turns WHERE id=? AND session_id=? AND child_id=?",
+        input.turnId, id, child.id,
+      );
+      if (
+        currentText !== input.stream.expectedText ||
+        (!input.stream.first && !input.spokenText.startsWith(currentText)) ||
+        (delivered?.spoken_tutor_text && !input.spokenText.startsWith(delivered.spoken_tutor_text))
+      ) throw new HttpError(409, "Speech already delivered cannot be rewritten.");
+      const checks = responseQuality(s, input.spokenText, {
+        partial: input.stream.status !== "complete",
+      });
+      if (checks.length) throw new HttpError(422, "Speech did not pass the response checks.");
+    }
     const previousWords = wordCount(
       s.conversation.spokenText ?? s.conversation.text,
     );
@@ -317,9 +411,28 @@ export function replaceTutorSpeech(
       );
       if (index >= 0) memory.recentTutorQuestions.splice(index, 1);
     }
-    s.conversation = undefined;
-    verifyTutorTurn(s, p);
-    alignWhiteboard(p, prior.spokenText ?? prior.text);
+    if (input.stream) {
+      // Never run a rewriting verifier after a prefix has reached playback.
+      // The cumulative wording was checked above, inside this transaction.
+      p.speechStatus = input.stream.status;
+      p.verification = { passed: true, revised: true, checks: [] };
+      memory.recentTutorQuestions = [
+        ...memory.recentTutorQuestions, ...questionsIn(input.spokenText),
+      ].slice(-12);
+    } else {
+      s.conversation = undefined;
+      verifyTutorTurn(s, p);
+    }
+    if (!input.quality?.usedFallback)
+      applyTeachingNote(p, s.question, input.teachingNote);
+    if (
+      input.visualDirection &&
+      s.assistance > 0 &&
+      !input.quality?.usedFallback
+    )
+      applyVisualDirection(p, input.visualDirection);
+    if (!input.stream || input.stream.status === "complete")
+      alignWhiteboard(p, input.stream?.draft ?? prior.spokenText ?? prior.text);
     if (input.quality?.usedFallback && p.verification) {
       p.verification.passed = false;
       p.verification.revised = true;
@@ -333,6 +446,7 @@ export function replaceTutorSpeech(
       t.turnId === p.turnId ? { ...t, text: p.spokenText ?? p.text } : t,
     );
     memory.wordShare.tutor += wordCount(p.spokenText ?? p.text) - previousWords;
+    recordDialogueExplanation(s, p, "voice");
     saveSession(s);
     const row = one<{ data: string }>(
       "SELECT data FROM conversation_turns WHERE id=? AND session_id=? AND child_id=?",
@@ -388,6 +502,14 @@ export function deliveredSpeech(
     receipt.interrupted ? 1 : 0,
     receipt.turnId,
   );
+  const s = sessionById(sessionId);
+  const explanation = s.teaching?.dialogue?.explanations.find(
+    (entry) => entry.id === receipt.turnId,
+  );
+  if (explanation && spoken.length >= explanation.deliveredText.length) {
+    explanation.deliveredText = spoken;
+    saveSession(s);
+  }
 }
 function presentation(
   s: LearningSession,
@@ -446,14 +568,11 @@ function presentation(
     canvasActions = [];
   } else if (m.checkpoint) {
     if (!text.trim().endsWith("?")) text += ` ${m.checkpoint.prompt}`;
-  } else
-    text += ` ${
-      s.question.choices?.length && !introduced ? `${choiceDirection(s)} ` : ""
-    }${s.question.prompt}`;
+  } else text += ` ${s.question.prompt}`;
   if (!["SESSION_REVIEW", "COMPLETE"].includes(s.state)) {
     if (m.checkpoint) spokenText = text;
     else if (!introduced) spokenText = text;
-    else if (t.message.trim().endsWith("?"))
+    else if (t.message.trim())
       spokenText = prefix ? `${prefix} ${t.message}` : t.message;
     else
       spokenText = `${prefix ? `${prefix} ` : ""}${t.message} ${focusingQuestion(s)}`;
@@ -513,7 +632,14 @@ function saveTurn(
     ["hint", "show", "confused", "easier", "why"].includes(p.intent)
   ) {
     const note = (p.spokenText ?? p.text).split(/(?<=[.!])\s+/)[0];
-    if (note && !note.includes("?") && note.length <= 500)
+    if (
+      note &&
+      !note.includes("?") &&
+      note.length <= 500 &&
+      !/^(?:let['’]s|try|look|compare|trace|use|which|what|point|we|you|not quite)\b/i.test(
+        note,
+      )
+    )
       p.canvasActions = [
         {
           type: "writeText",
@@ -525,9 +651,17 @@ function saveTurn(
         },
       ];
   }
+  if (!["COMPLETE", "SESSION_REVIEW"].includes(s.state)) {
+    const dialogue = s.teaching?.dialogue?.plan;
+    buildTeachingScene(
+      p,
+      dialogue?.questionPolicy === "none" ? dialogue.focusQuestion : s.question,
+    );
+  }
   alignWhiteboard(p);
   s.conversation = p;
   const memory = memoryFor(s);
+  recordDialogueExplanation(s, p, source);
   memory.recentTutorTurns = [
     ...(memory.recentTutorTurns ?? []),
     {
@@ -653,7 +787,10 @@ export function converse(
       understood?.intent === "end_session" ||
       understood?.intent === "finish";
     if (requestedEnd) {
-      if (input.heard) deliveredSpeech(child, id, input.heard);
+      if (input.heard) {
+        deliveredSpeech(child, id, input.heard);
+        s = sessionById(id);
+      }
       const memory = memoryFor(s);
       memory.lastTurnTrace = {
         inputTask: taskSnapshot(s),
@@ -673,9 +810,12 @@ export function converse(
         409,
         "Your lesson changed. Reconnect to your saved place.",
       );
-    if (input.heard) deliveredSpeech(child, id, input.heard);
+    if (input.heard) {
+      deliveredSpeech(child, id, input.heard);
+      s = sessionById(id);
+    }
     const turn =
-        understood ?? interpretTaskUtterance(input.transcript, s, input.source),
+        understood ?? interpretStudentTurn(input.transcript, s, input.source),
       l = learnerFor(child.id),
       m = memoryFor(s);
     if (
@@ -690,6 +830,7 @@ export function converse(
       interpretationSource: "local",
     };
     m.lastUtterance = input.transcript;
+    const dialoguePlan = planDialogue(s, turn, input.transcript);
     if (turn.reasoning || turn.intent === "reasoning")
       m.recentReasoning = [
         ...m.recentReasoning,
@@ -757,6 +898,8 @@ export function converse(
     const checkpointObservation =
       m.checkpoint &&
       !checkpointAnswer &&
+      !(turn.intent === "off_topic" && dialoguePlan.mode === "social") &&
+      turn.answerTarget !== "task" &&
       input.source !== "canvas" &&
       !s.question.choices?.includes(turn.answer ?? "") &&
       !/^(?:my answer is|the answer is|i choose|i pick)\b/i.test(
@@ -854,6 +997,32 @@ export function converse(
         prefix = "Now try a different example without help.";
       }
     } else if (
+      [
+        "direct_explanation",
+        "worked_example",
+        "analogy_repair",
+        "tangent",
+      ].includes(dialoguePlan.mode) &&
+      !["answer", "correction"].includes(turn.intent)
+    ) {
+      direct = explanationDraft(s, dialoguePlan);
+      if (dialoguePlan.mode !== "tangent") {
+        s.assistance = Math.max(1, s.assistance);
+        s.decision.pedagogicalMove = "explain";
+        m.assistanceLedger.push({
+          questionId: s.question.id,
+          conceptId: s.question.conceptId,
+          strategy: s.decision.strategy,
+          kind: dialoguePlan.example ? "worked_example" : "hint",
+          level: s.assistance,
+          turn: m.reasoningPath.length,
+          supportedSuccess: false,
+          independentlyVerified: false,
+        });
+        m.assistanceLedger = m.assistanceLedger.slice(-40);
+      }
+      if (dialoguePlan.mode !== "tangent") m.checkpoint = undefined;
+    } else if (
       requestsGuidedSteps(input.transcript) &&
       guidedSteps(s.question).length &&
       !s.feedback &&
@@ -864,6 +1033,7 @@ export function converse(
       } else direct = beginGuidedPractice(s) ?? undefined;
     } else if (
       m.guidedPractice &&
+      turn.answerTarget !== "task" &&
       ["answer", "correction", "reasoning", "off_topic"].includes(turn.intent)
     ) {
       const result = respondToGuidedStep(s, turn.answer ?? input.transcript);
@@ -960,13 +1130,7 @@ export function converse(
         reason: s.decision.reason,
       });
       saveLearner(child.id, l);
-      if (!prefix)
-        prefix =
-          turn.intent === "hint"
-            ? "Here’s one small step."
-            : turn.intent === "show"
-              ? "Yes—let’s put it on the canvas."
-              : "We can look at it another way.";
+      // The selected support already explains the idea. No recurring preamble.
     } else if (turn.intent === "feedback") {
       m.guidedPractice = undefined;
       if (s.feedback) s.feedback = null;
@@ -976,8 +1140,7 @@ export function converse(
         reason: "Learner said the current interaction was not helping.",
       });
       saveLearner(child.id, l);
-      prefix =
-        "Thanks for telling me. I was repeating myself, so I’ll change both the explanation and what I ask you to notice.";
+      prefix = "";
     } else if (turn.intent === "define" || turn.intent === "why") {
       const material = materialFor(
         s.question,
@@ -998,25 +1161,29 @@ export function converse(
           : "It’s okay to be unsure. What is one part you do know?";
     } else if (turn.intent === "rapport") {
       const review = s.state === "SESSION_REVIEW";
-      direct = /hear me|do you hear|are you there/i.test(input.transcript)
-        ? review
-          ? "Yes, I can hear you. Before we stop, did today feel a little clearer, ready for more, or still tricky?"
-          : `Yes, I can hear you. I’m here with you. Let’s take this one step at a time: ${s.question.prompt}`
-        : /thank/i.test(input.transcript)
+      direct =
+        routineReply(input.transcript) ??
+        (/hear me|do you hear|are you there/i.test(input.transcript)
           ? review
-            ? "You’re welcome. Before we finish, did this feel clearer, ready for more, or still tricky?"
-            : "You’re welcome. Take your time—I’m here if you need me."
-          : /sorry/i.test(input.transcript)
-            ? "No need to apologize. What would you like to go over?"
-            : /how are you/i.test(input.transcript)
-              ? "I’m ready to learn with you. How are you feeling about this problem?"
-              : /(?:your name|who are you)/i.test(input.transcript)
-                ? "I’m Da Vinci, your learning partner. Would a clue, a picture, or some thinking time help most?"
-                : /\b(?:i like|i love|my favorite)\b/i.test(input.transcript)
-                  ? `Thanks for telling me. We can connect new ideas to things you enjoy. What connection do you notice in today’s problem?`
-                  : /\b(?:tired|sad|upset|frustrated)\b/i.test(input.transcript)
-                    ? "Thanks for telling me. We can slow down, take a break, or try one small step. What would feel best?"
-                    : `Hi! I’m here and listening. What would help you get started?`;
+            ? "Yes, I can hear you. Before we stop, did today feel a little clearer, ready for more, or still tricky?"
+            : "Yes, I can hear you."
+          : /thank/i.test(input.transcript)
+            ? review
+              ? "You’re welcome. Before we finish, did this feel clearer, ready for more, or still tricky?"
+              : "You’re welcome. Take your time—I’m here if you need me."
+            : /sorry/i.test(input.transcript)
+              ? "No need to apologize. What would you like to go over?"
+              : /how are you/i.test(input.transcript)
+                ? "I’m here and ready to help. How’s your day going?"
+                : /(?:your name|who are you)/i.test(input.transcript)
+                  ? "I’m Da Vinci, an AI tutor. I can explain ideas, work through examples, or help with a question you’re stuck on."
+                  : /\b(?:i like|i love|my favorite)\b/i.test(input.transcript)
+                    ? "We can talk about that, too. What do you enjoy about it?"
+                    : /\b(?:tired|sad|upset|frustrated)\b/i.test(
+                          input.transcript,
+                        )
+                      ? "Thanks for telling me. We can slow down, take a break, or try one small step. What would feel best?"
+                      : `Hi! I’m here and listening. What would help you get started?`);
     } else if (turn.intent === "reasoning") {
       const result = assessReasoning(
         turn.reasoning ?? input.transcript,
@@ -1080,8 +1247,22 @@ export function converse(
           ? "That question is already checked. We can keep practising, or you can finish the session."
           : `We can keep working on this question. ${s.question.prompt}`;
       } else if (s.feedback) {
-        direct =
-          "We’ve checked that answer. Tell me why it works, or say continue.";
+        // Recover saved sessions that were waiting at the old reasoning gate.
+        // The answer has already been assessed; advance without grading twice.
+        if (
+          m.awaitingReasoning &&
+          gradeQuestion(s.question, turn.answer ?? "")
+        ) {
+          m.awaitingReasoning = false;
+          saveSession(s);
+          s = advanceSession(child, id, {
+            action: "continue",
+            version: s.version,
+          });
+          prefix = "That answer is already checked. Here’s the next question.";
+        } else
+          direct =
+            "That question has already been checked. Say next when you’re ready for a new one.";
       } else {
         const answer = turn.answer ?? spokenMath(input.transcript);
         const valid = answer.trim().length > 0;
@@ -1090,25 +1271,38 @@ export function converse(
             "I didn’t catch your answer clearly. Could you say it another way?";
         else {
           saveSession(s);
+          const answerClaim = turn.dialogue?.answerEvidence ?? input.transcript;
           const selected =
+            turn.selectedChoice ||
             input.source === "canvas" ||
+            /^(?:(?:the|my) )?(?:correct )?(?:option|choice)\b/i.test(
+              answerClaim.trim(),
+            ) ||
             /^(?:(?:i think |i choose |i pick |option |answer |the answer is )*)(?:[a-f]|(?:the )?(?:first|second|third|fourth|fifth|sixth)(?: (?:one|choice|option))?)[.!?]*$/i.test(
-              input.transcript.trim(),
+              answerClaim.trim(),
             ) ||
             Object.values(s.question.choiceLabels ?? {}).some(
               (label) =>
+                !/^[-+\d./ ]+$/.test(label) &&
                 label.toLowerCase().replace(/[.!?]+$/, "") ===
-                input.transcript
-                  .trim()
-                  .toLowerCase()
-                  .replace(/[.!?]+$/, ""),
+                  answerClaim
+                    .trim()
+                    .toLowerCase()
+                    .replace(/[.!?]+$/, ""),
             );
           const correct = gradeQuestion(s.question, answer);
           assessment = {
+            optionLabel:
+              selected && s.question.choices?.includes(answer)
+                ? String.fromCharCode(65 + s.question.choices.indexOf(answer))
+                : undefined,
             questionId: s.question.id,
             prompt: s.question.prompt,
             answer,
             correct,
+            explanation: correct ? s.question.explanation : undefined,
+            responseMode: selected ? "selected" : "constructed",
+            supportLevel: s.assistance,
           };
           m.checkpoint = undefined;
           s = advanceSession(child, id, {
@@ -1122,6 +1316,7 @@ export function converse(
           const probed = finishDiagnosticProbe(s, correct);
           if (probed) saveSession(s);
           if (correct) {
+            state.awaitingReasoning = false;
             if (state.returnStack.length) {
               const frame = state.returnStack[state.returnStack.length - 1];
               s = advanceSession(child, id, {
@@ -1129,47 +1324,29 @@ export function converse(
                 version: s.version,
               });
               prefix = `That building block works. Back to ${conceptById[frame.skillId].name.toLowerCase()}.`;
-            } else if (
-              (selected || s.attempts % 3 === 0) &&
-              !turn.reasoning &&
-              !state.awaitingReasoning
-            ) {
-              state.awaitingReasoning = true;
-              direct =
-                s.question.subject === "Math"
-                  ? "That choice fits. What calculation or relationship helped you decide?"
-                  : s.question.subject === "Science"
-                    ? "That choice fits. Which observation supports your explanation?"
-                    : s.question.subject === "English"
-                      ? "That choice fits. Which words or details support it?"
-                      : "That choice fits. Which detail in the source, map, or question supports it?";
             } else {
               s = advanceSession(child, id, {
                 action: "continue",
                 version: s.version,
               });
-              prefix =
-                state.signals.supportSuccesses >= 2
-                  ? "That’s working. Let’s try with less support."
-                  : "That fits. Let’s build on it.";
+              prefix = "That’s correct.";
             }
           } else {
             const updated = learnerFor(child.id);
             s.feedback = null;
             s.question = {
               ...s.question,
-              id: `${s.question.id.split(":").slice(0, 2).join(":")}:retry${++state.responseOrdinal}`,
+              assessmentKey: questionKey(s),
+              id: `${s.question.id.split(":retry")[0]}:retry${++state.responseOrdinal}`,
             };
             const change = probed
               ? { next: s.decision.strategy, reason: s.decision.reason }
-              : startDiagnosticProbe(s)
-                ? { next: s.decision.strategy, reason: s.decision.reason }
-                : applySupport(s, updated, child, "another", false);
+              : applySupport(s, updated, child, "another", false);
             saveLearner(child.id, updated);
             event(s, "strategy_changed", change);
             prefix = state.intelligence?.diagnostic
               ? "Let’s check one building block before choosing how to help."
-              : "That answer doesn’t fit yet. Let’s try a different approach.";
+              : "Not quite.";
           }
         }
       }
@@ -1188,9 +1365,37 @@ export function converse(
         "That’s an interesting direction. Tell me how you think it connects to what we’re learning, and I’ll follow your idea.";
     else
       direct = `I’m listening, but I’m not sure which part you want to explore. Tell me your idea, ask about a word, or ask me to show it visually.`;
+    if (
+      !assessment &&
+      turn.dialogue?.request &&
+      ["answer", "correction"].includes(turn.intent) &&
+      dialoguePlan.focusStep
+    ) {
+      direct = explanationDraft(s, dialoguePlan);
+    }
     s.version++;
     const p = presentation(s, turn.intent, prefix);
     p.assessment = assessment;
+    // Process the answer once through the existing assessor, then address the
+    // remaining request against its original task, not the newly selected key.
+    if (assessment && turn.dialogue?.request && s.state !== "COMPLETE") {
+      direct = `${assessment.correct ? "That’s correct." : "Not quite."} ${explanationDraft(s, dialoguePlan, assessment.correct)}`;
+      dialogueMemory(s).plan = dialoguePlan;
+      // The explanation replaces the support probe; do not keep a hidden
+      // observation checkpoint that could consume the next submitted answer.
+      memoryFor(s).checkpoint = undefined;
+    }
+    if (
+      assessment?.correct &&
+      assessment.questionId !== s.question.id &&
+      !["SESSION_REVIEW", "COMPLETE"].includes(s.state)
+    ) {
+      // A completed answer is not an invitation to add another generic probe.
+      // The next checkpoint/task still comes from the deterministic policy.
+      p.text = p.spokenText =
+        `${successBridge(s, assessment.supportLevel, assessment.optionLabel)} ${focusingQuestion(s)}`.trim();
+      p.teachingMove = "acknowledge_and_advance";
+    }
     if (memoryFor(s).awaitingReasoning && s.feedback)
       p.teachingMove = "ask_reasoning";
     if (returnedFromGuidedSteps) p.teachingMove = "return_to_task";
@@ -1224,7 +1429,7 @@ export function converse(
       guided?.questionId === s.question.id
         ? guidedSteps(s.question)[guided.stepIndex]
         : undefined;
-    if (guidedStep) {
+    if (guidedStep && dialoguePlan.questionPolicy !== "none") {
       memoryFor(s).goal.nextMove =
         `Check the learner’s response to “${guidedStep.prompt}” as a supported substep, without awarding mastery.`;
       p.teachingMove = "guided_step";
@@ -1250,6 +1455,29 @@ export function converse(
           label: guidedStep.prompt,
         },
       ];
+    }
+    if (
+      dialoguePlan.questionPolicy === "none" &&
+      !["wait", "repeat", "reveal"].includes(turn.intent)
+    ) {
+      p.teachingMove = dialoguePlan.mode;
+      p.cognitiveLoad = "explicit";
+      if (dialoguePlan.mode !== "tangent")
+        p.cues = p.cues.filter((cue) => cue.action !== "question");
+      if (dialoguePlan.example) {
+        // Separate example speech must not point at the original task's model.
+        const text = `${dialoguePlan.example.prompt} ${dialoguePlan.example.explanation}`;
+        p.cues = [
+          {
+            id: "dialogue-example",
+            atWord: 0,
+            action: "show",
+            visuals: [{ type: "passage", text, highlights: [] }],
+            label: "Separate worked example",
+          },
+        ];
+        p.canvasActions = workedExampleActions(dialoguePlan.example);
+      }
     }
     if (
       turn.intent === "reveal" &&

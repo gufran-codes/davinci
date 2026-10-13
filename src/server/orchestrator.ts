@@ -34,6 +34,7 @@ import {
 } from "./repository";
 import { questionKey } from "./learning-controls";
 import { analytics } from "./analytics";
+import { freshQuestion } from "../lib/teaching/progression";
 const lessonPhases: Phase[] = [
   "WARMUP",
   "DIAGNOSTIC",
@@ -56,6 +57,10 @@ function assistanceFor(s: LearningSession) {
 }
 function questionEvent(s: LearningSession) {
   const memory = memoryFor(s);
+  memory.servedQuestions = [
+    ...(memory.servedQuestions ?? []),
+    { skillId: s.question.conceptId, prompt: s.question.prompt },
+  ].slice(-160);
   memory.goal = {
     skillId: s.question.conceptId,
     objective: s.decision.objective,
@@ -587,6 +592,11 @@ export function advanceSession(
       throw new HttpError(409, "Try the question before continuing.");
     const wasCorrect =
       learner.states[s.question.conceptId]?.evidence.at(-1)?.correct === true;
+    if (!wasCorrect)
+      throw new HttpError(
+        409,
+        "This question still needs an answer. Ask for help or view its solution when available.",
+      );
     s.step++;
     s.feedback = null;
     s.assistance = 0;
@@ -615,11 +625,21 @@ export function advanceSession(
       s.decision.difficultyBand = "transfer";
       s.decision.reason =
         "Check whether supported learning transfers to a fresh problem without help.";
-      s.question = getQuestion(
+      const fresh = freshQuestion(
+        s,
         check.conceptId,
         sessionsFor(child.id).length * 17 + ++memory.responseOrdinal + 97,
         true,
       );
+      if (!fresh) {
+        s.state = "SESSION_REVIEW";
+        memory.questionPoolExhausted = true;
+        memory.pendingIndependentCheck = undefined;
+        memory.activeIndependentCheck = undefined;
+        saveSession(s);
+        return s;
+      }
+      s.question = fresh;
       s.assistance = 0;
       memory.activeIndependentCheck = {
         ...check,
@@ -706,11 +726,19 @@ export function advanceSession(
       decision.pedagogicalMove = s.decision.pedagogicalMove;
     }
     s.decision = decision;
-    s.question = getQuestion(
+    const fresh = freshQuestion(
+      s,
       target,
       sessionsFor(child.id).length * 11 + s.step,
       ["INDEPENDENT_PRACTICE", "MASTERY_CHECK"].includes(s.state),
     );
+    if (!fresh) {
+      s.state = "SESSION_REVIEW";
+      memory.questionPoolExhausted = true;
+      saveSession(s);
+      return s;
+    }
+    s.question = fresh;
     s.assistance = assistanceFor(s);
     saveSession(s);
     questionEvent(s);

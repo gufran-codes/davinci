@@ -31,6 +31,8 @@ const { buildTeachingState } = await import("../src/server/provider");
 const { answerAccess, saveControls } =
   await import("../src/server/learning-controls");
 const { conceptById } = await import("../src/lib/curriculum");
+const { startDiagnosticProbe } =
+  await import("../src/lib/teaching/session-intelligence");
 const parent = register(
   "Parent",
   "brain-parent@test.local",
@@ -62,12 +64,19 @@ function setup() {
   return { child, id: started.id, say };
 }
 
-test("competing hypotheses choose a foundation probe, update from evidence, then return", () => {
+test("legacy explicit foundation probes return to the exact unresolved task", () => {
   const f = setup();
   const original = sessionById(f.id).question;
   assert.ok(original.misconception);
   f.say(original.misconception.answer);
   let s = f.say(original.misconception.answer);
+  assert.equal(
+    s.question.prompt,
+    original.prompt,
+    "Wrong answers must not silently start a diagnostic",
+  );
+  assert.ok(startDiagnosticProbe(s));
+  saveSession(s);
   assert.equal(s.state, "PROBE");
   assert.equal(s.assistance, 0);
   const brain = memoryFor(s).intelligence!;
@@ -78,6 +87,8 @@ test("competing hypotheses choose a foundation probe, update from evidence, then
   const before = brain.hypotheses.find((h) => h.id === id)!.confidence;
   s = f.say(s.question.answer);
   assert.equal(s.question.conceptId, original.conceptId);
+  assert.equal(s.question.prompt, original.prompt);
+  assert.equal(answerAccess(s).attempts, 2);
   assert.equal(memoryFor(s).returnStack.length, 0);
   assert.ok(
     memoryFor(s).intelligence!.hypotheses.find((h) => h.id === id)!.confidence <
@@ -96,6 +107,8 @@ test("failed diagnostic remediates its foundation before returning to the target
   let s = sessionById(f.id);
   f.say(s.question.misconception!.answer);
   s = f.say(s.question.misconception!.answer);
+  assert.ok(startDiagnosticProbe(s));
+  saveSession(s);
   const foundation = s.question.conceptId;
   s = f.say("9999");
   assert.equal(s.state, "REMEDIATION");

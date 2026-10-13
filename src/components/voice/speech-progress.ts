@@ -9,7 +9,10 @@ export class SpeechProgress {
   private accepting = false;
   private cancelled = false;
   reset(turnId: string, speech: string, replay = false) {
-    if (turnId === this.turnId && !replay) return;
+    if (turnId === this.turnId && !replay) {
+      if (speech.startsWith(this.speech)) this.speech = speech;
+      return;
+    }
     for (const id of this.segments.keys()) this.retired.add(id);
     this.retired = new Set([...this.retired].slice(-200));
     this.turnId = turnId;

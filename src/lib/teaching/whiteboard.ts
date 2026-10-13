@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Visual } from "../types";
+import { sourceVisuals } from "./source-diagram";
 const point = z.tuple([z.number().min(0).max(800), z.number().min(0).max(400)]);
 export const boardObjectSchema = z.object({
   id: z.string().max(80),
@@ -43,6 +44,38 @@ const fraction = z.object({
 });
 export const canvasActionSchema = z.discriminatedUnion("type", [
   z.object({
+    type: z.literal("showAtomModel"),
+    ...tutorAction,
+    protons: z.number().int().min(0).max(118).nullable(),
+    neutrons: z.number().int().min(0).max(118).nullable(),
+    electrons: z.number().int().min(0).max(118).nullable(),
+  }),
+  z.object({
+    type: z.literal("showEvidenceCard"),
+    ...tutorAction,
+    groupId: z.string().max(80),
+    heading: z.string().max(100),
+    text: z.string().min(1).max(500),
+    highlights: z.array(z.string().max(160)).max(4),
+    layout: z.enum(["evidence", "comparison", "steps"]),
+  }),
+  z.object({
+    type: z.literal("drawDataBar"),
+    ...tutorAction,
+    chartId: z.string().max(80),
+    title: z.string().max(160),
+    label: z.string().max(160),
+    value: z.number().min(0).max(1e9),
+    unit: z.string().max(100),
+  }),
+  z.object({
+    type: z.literal("drawTimelineEvent"),
+    ...tutorAction,
+    timelineId: z.string().max(80),
+    date: z.string().max(80),
+    label: z.string().max(300),
+  }),
+  z.object({
     type: z.literal("writeText"),
     ...tutorAction,
     text: z.string().min(1).max(500),
@@ -61,6 +94,7 @@ export const canvasActionSchema = z.discriminatedUnion("type", [
     diagramId: z.string().min(1).max(80),
     fromId: z.string().min(1).max(80),
     toId: z.string().min(1).max(80),
+    label: z.string().max(100).optional(),
   }),
   z.object({
     type: z.literal("highlightText"),
@@ -287,7 +321,7 @@ export function visualActionSequence(
   revealParallelStep = false,
 ) {
   const actions: unknown[] = [];
-  visuals.forEach((visual, index) => {
+  sourceVisuals("", visuals).forEach((visual, index) => {
     const id = `visual-${index}`;
     switch (visual.type) {
       case "diagram":
@@ -341,6 +375,50 @@ export function visualActionSequence(
               atWord: (n + 1) * 4,
             }),
           );
+        break;
+      case "table": {
+        // Convert only unambiguous two-column, nonnegative measurements.
+        // Complex tables stay tables, rather than guessing units or axes.
+        if (
+          visual.headers.length !== 2 ||
+          visual.rows.length < 2 ||
+          visual.rows.length > 8 ||
+          visual.rows.some(
+            (row) =>
+              row.length !== 2 ||
+              !/^\d+(?:\.\d+)?$/.test(row[1]) ||
+              Number(row[1]) > 1e9,
+          )
+        )
+          break;
+        visual.rows.forEach((row, n) =>
+          actions.push({
+            type: "drawDataBar",
+            id: `${id}-bar-${n}`,
+            owner: "tutor",
+            chartId: id,
+            title: `${visual.headers[1]} by ${visual.headers[0]}`,
+            label: row[0],
+            value: Number(row[1]),
+            unit: visual.headers[1],
+            atWord: n * 5,
+          }),
+        );
+        break;
+      }
+      case "timeline":
+        if (visual.events.length > 8) break;
+        visual.events.forEach((event, n) =>
+          actions.push({
+            type: "drawTimelineEvent",
+            id: `${id}-event-${n}`,
+            owner: "tutor",
+            timelineId: id,
+            date: event.date,
+            label: event.label,
+            atWord: n * 5,
+          }),
+        );
         break;
       case "equation":
         actions.push({

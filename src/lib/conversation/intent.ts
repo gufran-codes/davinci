@@ -1,6 +1,7 @@
 import type { ConversationIntent } from "../teaching/types";
 import type { Question } from "../types";
 export interface UnderstoodTurn {
+  dialogue?: import("./student-dialogue").StudentDialogue;
   intent: ConversationIntent;
   answer?: string;
   term?: string;
@@ -8,6 +9,8 @@ export interface UnderstoodTurn {
   reasoning?: string;
   ambiguity?: "clear" | "ambiguous";
   needsClarification?: boolean;
+  selectedChoice?: boolean;
+  answerTarget?: "task";
 }
 const numbers: Record<string, string> = {
   zero: "0",
@@ -39,6 +42,24 @@ const numbers: Record<string, string> = {
   eighty: "80",
   ninety: "90",
 };
+/** Strip only explicit answer framing, never negation or uncertain alternatives. */
+export function choiceClaim(text: string) {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[’]/g, "'")
+    .replace(
+      /^(?:(?:i think|i choose|i pick|i(?:'ll| will| would) (?:choose|pick|go with)|i select)\s+|(?:the |my )?(?:correct )?(?:answer|option|choice)(?: is| would be)?\s+|it is\s+|it's\s+)+/g,
+      "",
+    )
+    .replace(/^["“']|["”'.!?]+$/g, "")
+    .replace(
+      /\s+(?:is|would be)\s+(?:the\s+)?(?:correct\s+)?(?:answer|option|choice)$/g,
+      "",
+    )
+    .replace(/\s+is\s+(?:correct|right)$/g, "")
+    .trim();
+}
 export function spokenMath(input: string) {
   let text = input
     .toLowerCase()
@@ -110,7 +131,7 @@ export function understandLocally(
       t,
     )
   )
-    return { intent: "confused", confidence: "low" };
+    return { intent: "confused" };
   if (
     /\b(step by step|one step at a time|walk me through|help me with (?:the )?steps)\b/.test(
       t,
@@ -120,11 +141,16 @@ export function understandLocally(
   if (/\b(?:show|tell|give|reveal)\b.*\b(?:answer|solution)\b/.test(t))
     return { intent: "reveal" };
   if (q.choices) {
-    const letter = t.match(
-      /^(?:(?:i think |i choose |option |answer )*)([a-f])[.!?]?$/,
-    )?.[1];
-    const ordinal = t.match(
-      /^(?:(?:i choose|i pick|the answer is) )?(?:the )?(first|second|third|fourth|fifth|sixth)(?: (?:one|choice|option))?[.!?]*$/,
+    const claim = choiceClaim(t);
+    const literal = q.choices.filter(
+      (choice) =>
+        choiceClaim(choice) === claim ||
+        choiceClaim(q.choiceLabels?.[choice] ?? "") === claim,
+    );
+    if (literal.length === 1) return { intent: "answer", answer: literal[0] };
+    const letter = claim.match(/^([a-f])$/)?.[1];
+    const ordinal = claim.match(
+      /^(?:the )?(first|second|third|fourth|fifth|sixth)(?: (?:one|choice|option))?$/,
     )?.[1];
     const index = letter
       ? letter.charCodeAt(0) - 97

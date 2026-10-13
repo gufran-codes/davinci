@@ -49,6 +49,19 @@ export const skillContentSchema = z.object({
   status: z.enum(["draft", "reviewed", "approved"]),
   provenance: z.string(),
   reviewer: z.string().nullable(),
+  lesson: z
+    .object({
+      coreIdea: z.string().min(20),
+      teachingSteps: z.array(z.string().min(10)).min(3),
+      workedExample: z.object({
+        prompt: z.string(),
+        steps: z.array(z.string()).min(2),
+        answer: z.string(),
+      }),
+      commonError: z.string(),
+      transferGoal: z.string(),
+    })
+    .optional(),
   questions: z
     .array(
       z
@@ -62,7 +75,7 @@ export const skillContentSchema = z.object({
 
           answer: z.string().min(1),
           choiceLabels: z
-            .record(z.string(), z.string().trim().min(8))
+            .record(z.string(), z.string().trim().min(1))
             .optional(),
           choiceMode: z.enum(["answer", "writing_support"]).optional(),
           choices: z.array(z.string().trim().min(1)).min(2).max(6).optional(),

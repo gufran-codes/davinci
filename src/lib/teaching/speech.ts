@@ -1,4 +1,47 @@
 import type { Strategy, Subject } from "../types";
+import { tutorSpeechBudget } from "./response-budget";
+
+// Catch verbal padding separately from whole-turn similarity: the task after
+// the opener changes on every successful answer, hiding a repeated catchphrase.
+const stockTransition =
+  /\b(?:let['’]s build on (?:it|that|this)|let['’]s pause on one idea|let['’]s see what you think|here['’]s one small step|we can look at it another way|(?:let['’]s )?see what['’]?s changed)\b/i;
+export function dialogueStyleChecks(
+  speech: string,
+  recent: string[],
+  requiredQuestion?: string,
+) {
+  const checks: string[] = [];
+  // A curriculum question is not a conversational opener; preserve it exactly.
+  const preamble =
+    requiredQuestion && speech.includes(requiredQuestion)
+      ? speech.slice(0, speech.indexOf(requiredQuestion))
+      : speech;
+  if (stockTransition.test(preamble)) checks.push("stock_transition");
+  const opening = (text: string) => {
+    const first = text
+      .split(/[.!?]/)[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]/g, "")
+      .trim();
+    // Do not reject recurring subject vocabulary or short acknowledgements.
+    if (
+      !/^(?:lets|that|you|we|great|good|nice|okay|alright|heres|take|thanks)\b/.test(
+        first,
+      )
+    )
+      return "";
+    const words = first.split(/\s+/);
+    return words.length >= 4 ? words.slice(0, 6).join(" ") : "";
+  };
+  const lead = opening(preamble);
+  if (lead && recent.some((text) => opening(text) === lead))
+    checks.push("repeated_opening");
+  return checks;
+}
+
+export function tutorWordLimit(intent: string, utterance = "", mode?: string) {
+  return tutorSpeechBudget({ intent, utterance, mode }).maxWords;
+}
 
 export interface TutorSpeechProfile {
   ageDirection: string;
@@ -70,11 +113,11 @@ export function tutorSpeechProfile(input: {
   const younger = input.grade <= 3;
   const shapeByLoad: Record<string, string> = {
     independent:
-      "Acknowledge the learner briefly, then ask the policy-approved question without adding help.",
+      "Ask the policy-approved question without adding help. A brief acknowledgement is optional; do not add a motivational preamble.",
     focusing:
-      "React to what the learner just communicated, focus attention on one feature, and end with one question.",
+      "React to the learner and focus on one feature. Ask a question only when the response plan calls for one.",
     guided:
-      "Offer one useful clue or connection, then end with one answerable next-step question.",
+      "Offer one useful clue. Add at most one next-step question when permitted by the response plan.",
     explicit:
       "Explain one small step plainly, say why it helps, and give the learner a clear next move.",
   };
@@ -83,9 +126,12 @@ export function tutorSpeechProfile(input: {
       ? "Use familiar words, short clauses, and concrete verbs appropriate for an early elementary learner."
       : "Use natural school-age language without sounding babyish or overly formal.",
     strategyDirection: strategyDirections[input.strategy],
-    turnShape:
-      shapeByLoad[input.cognitiveLoad ?? ""] ??
-      "Respond directly, make one teaching move, and leave a clear turn for the learner.",
+    turnShape: ["why", "define"].includes(input.intent)
+      ? "Answer the actual question directly, using the response plan's speech budget. A definition usually needs only one or two sentences. Do not turn the explanation into another quiz."
+      : input.teachingMove === "acknowledge_and_advance"
+        ? "Briefly confirm the checked answer, then ask the new required question. Do not infer the student's reasoning or demand an explanation."
+        : (shapeByLoad[input.cognitiveLoad ?? ""] ??
+          "Respond directly, make one teaching move, and leave a clear turn for the learner."),
     tone:
       input.intent === "confused" || input.intent === "feedback"
         ? "Calm, responsive, and matter-of-fact; acknowledge the difficulty without generic praise."
@@ -98,6 +144,8 @@ export function tutorSpeechProfile(input: {
       "announcing the strategy by name",
       "asking more than one question",
       "using the same opening as the previous tutor turn",
+      "stock transitions such as let's build on it, let's pause on one idea, or here's one small step",
+      "adding a question to every response, including a definition or a social acknowledgement",
     ],
   };
 }

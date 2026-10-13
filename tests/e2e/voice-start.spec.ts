@@ -10,11 +10,15 @@ test("lesson auto-connects, recovers blocked greeting, and respects voice off", 
   });
   await page.addInitScript(() => {
     let first = true;
+    let failRecognition: (() => void) | undefined;
+    window.addEventListener("test-voice-failure", () => failRecognition?.());
     class Recognition {
+      onerror?: (event: { error: string }) => void;
       continuous = false;
       interimResults = false;
       lang = "";
       start() {
+        failRecognition = () => this.onerror?.({ error: "audio-capture" });
         document.documentElement.dataset.mic = "on";
       }
       abort() {
@@ -100,4 +104,16 @@ test("lesson auto-connects, recovers blocked greeting, and respects voice off", 
   await page.getByRole("button", { name: "Reconnect voice" }).click();
   await expect(page.getByText("I’m listening", { exact: true })).toBeVisible();
   expect(connections).toBe(2);
+  // An unexpected provider failure (not Voice off) must release the retry lock.
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("test-voice-failure")),
+  );
+  await expect(
+    page.getByRole("button", { name: "Reconnect voice" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Reconnect voice" }).click();
+  await expect(page.getByText("I’m listening", { exact: true })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-mic", "on");
+  expect(connections).toBe(3);
+  await page.getByRole("button", { name: "Voice off", exact: true }).click();
 });

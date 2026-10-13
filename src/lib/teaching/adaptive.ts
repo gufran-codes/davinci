@@ -4,8 +4,9 @@ import { chooseDecision, updateStrategy } from "../learning";
 import type { Child, Learner, LearningSession, Visual } from "../types";
 import { freshSignals, rankStrategies } from "./strategies";
 import { materialFor } from "./content";
-import { selectSupportPlan, supportPlans } from "./grounded-support";
+import { selectSupportPlan, supportPlans, taskClue } from "./grounded-support";
 import { supportMove } from "./policy";
+import { sourceVisuals } from "./source-diagram";
 import type { CanvasCue, TeachingMemory } from "./types";
 export function memoryFor(s: LearningSession): TeachingMemory {
   const memory = (s.teaching ??= {
@@ -108,7 +109,8 @@ export function returnFromPrerequisite(s: LearningSession, l: Learner) {
   const m = memoryFor(s),
     frame = m.returnStack.pop();
   if (!frame) return false;
-  s.question = getQuestion(frame.skillId, ++m.responseOrdinal + 83);
+  // Resume the exact unresolved item, including its answer-access identity.
+  s.question = frame.question;
   s.state = frame.state;
   s.step = frame.step;
   s.decision = chooseDecision(l, frame.skillId);
@@ -186,7 +188,7 @@ export function applySupport(
   l: Learner,
   child: Child,
   kind: "hint" | "another" | "easier" | "show",
-  allowDescent = true,
+  allowDescent = false,
 ) {
   const m = memoryFor(s),
     signals = m.signals,
@@ -221,11 +223,23 @@ export function applySupport(
     kind === "show",
     ranked.map((strategy) => strategy.id),
   );
-  if (kind !== "hint") {
+  if (kind !== "hint" || m.hintLevel > 0) {
     m.usedSupportPlans.ids = [...m.usedSupportPlans.ids, plan.id].slice(-12);
     m.supportPlan = { ...plan, questionId: s.question.id };
-  } else m.supportPlan = undefined;
+  } else
+    m.supportPlan = {
+      id: "first-clue",
+      strategy: previous,
+      questionId: s.question.id,
+      message: taskClue(s.question),
+      prompt: "",
+      visuals: [],
+    };
   if (kind === "hint") {
+    if (m.supportPlan) {
+      s.decision.strategy = m.supportPlan.strategy;
+      s.decision.strategyId = m.supportPlan.strategy;
+    }
     m.hintLevel = Math.min(7, m.hintLevel + 1);
     signals.hintCount++;
     m.hintHistory.push({
@@ -246,7 +260,7 @@ export function applySupport(
     s.decision.scaffoldingLevel = Math.min(5, m.hintLevel);
     s.decision.pedagogicalMove = supportMove(kind, m.hintLevel);
     addAssistance(s, m.hintLevel >= 4 ? "worked_example" : "hint");
-    if (m.hintLevel === 7 && descend(s, l))
+    if (allowDescent && m.hintLevel === 7 && descend(s, l))
       return {
         previous,
         next: s.decision.strategy,
@@ -255,17 +269,26 @@ export function applySupport(
       };
     return {
       previous,
-      next: previous,
+      next: s.decision.strategy,
       descended: false,
       reason: `Progressive hint ${m.hintLevel}; the target answer stays unrevealed.`,
     };
   }
-  signals.confusion += kind === "show" ? 0 : 1;
+  const preferenceOnly =
+    kind === "show" ||
+    (kind === "another" &&
+      /(?:another|different|other) (?:way|method|approach|solution)/i.test(
+        m.lastUtterance ?? "",
+      ) &&
+      !/confus|don't understand|do not understand|not helping|stuck|hard/i.test(
+        m.lastUtterance ?? "",
+      ));
+  signals.confusion += preferenceOnly ? 0 : 1;
   signals.frustration = Math.min(
     5,
-    signals.frustration + (kind === "show" ? 0 : 1),
+    signals.frustration + (preferenceOnly ? 0 : 1),
   );
-  if (kind !== "show") {
+  if (!preferenceOnly) {
     m.attempts.push({
       questionId: s.question.id,
       skillId: concept.id,
@@ -320,11 +343,12 @@ export function applySupport(
   s.assistance = Math.min(2, Math.max(1, s.decision.scaffoldingLevel));
   s.decision.reason =
     selected?.reason ?? "Use an unused explanation grounded in this question.";
-  s.decision.personalization =
-    "That approach wasn’t helping. Let’s change how we look at it.";
-  m.hintLevel = 0;
+  s.decision.personalization = preferenceOnly
+    ? "Let’s look at a different connection."
+    : "Let’s work through the part that needs more support.";
+  // Changing representation must not restart the hint ladder for this item.
   if (kind === "easier") {
-    s.question = getQuestion(s.question.conceptId, 0);
+    // A smaller example is support, never a replacement assessment.
     s.decision.strategy = "simplified_case";
     s.decision.strategyId = "simplified_case";
     s.decision.pedagogicalMove = "worked_example";
@@ -457,27 +481,16 @@ export function spokenTeaching(s: LearningSession) {
         message = material.analogy;
         break;
       case "diagram_first":
-        message =
-          "Look at the connections in this diagram. What happens first?";
-        visuals = q.visuals.length
-          ? q.visuals
-          : [
-              {
-                type: "diagram",
-                title: conceptById[q.conceptId].name,
-                nodes: ["Observe", "Predict", "Check evidence"],
-                links: [
-                  [0, 1],
-                  [1, 2],
-                ],
-              },
-            ];
+        visuals = sourceVisuals(q.prompt, q.visuals);
+        message = visuals.some((v) => v.type === "diagram")
+          ? "Follow the connections in this diagram. Which relationship does the question ask about?"
+          : q.hint;
         break;
       case "evidence_first":
       case "guided_annotation":
         message =
           "Point to a detail that supports your thinking. What does that detail tell us?";
-        visuals = [{ type: "passage", text: q.prompt, highlights: [] }];
+        visuals = sourceVisuals(q.prompt, q.visuals);
         break;
       case "retrieval_practice":
         message = "Think back to what you learned. Try this without the model.";
@@ -502,7 +515,8 @@ export function spokenTeaching(s: LearningSession) {
       "MASTERY_CHECK",
     ].includes(s.state)
   ) {
-    message = "Let’s see what you think. Take your time.";
+    // The question itself is enough for an independent attempt.
+    message = "";
     visuals =
       [
         "fraction_meaning",
@@ -526,6 +540,8 @@ export function spokenTeaching(s: LearningSession) {
     message = `${grounded.message} ${grounded.prompt}`;
     visuals = grounded.visuals;
   }
+  if (s.assistance > 0 && grounded?.id === "first-clue")
+    visuals = sourceVisuals(q.prompt, visuals);
   const cues: CanvasCue[] = [
     {
       id: "model",

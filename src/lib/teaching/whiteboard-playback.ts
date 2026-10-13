@@ -19,15 +19,19 @@ export function alignWhiteboard(
     .sort((a, b) => a.atWord - b.atWord)
     .map((action) => {
       const label =
-        action.type === "drawDiagramNode"
-          ? action.label
-          : action.type === "highlightText"
-            ? action.phrase
-            : action.type === "showEquation"
-              ? action.equation
-              : action.type === "writeText" || action.type === "addText"
-                ? action.text
-                : "";
+        action.type === "showEvidenceCard"
+          ? action.text
+          : action.type === "drawDataBar" || action.type === "drawTimelineEvent"
+            ? action.label
+            : action.type === "drawDiagramNode"
+              ? action.label
+              : action.type === "highlightText"
+                ? action.phrase
+                : action.type === "showEquation"
+                  ? action.equation
+                  : action.type === "writeText" || action.type === "addText"
+                    ? action.text
+                    : "";
       const needle = tokens(label);
       const spoken = words(speech);
       let anchor = -1;

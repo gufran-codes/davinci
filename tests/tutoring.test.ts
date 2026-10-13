@@ -121,7 +121,7 @@ test("local renderer works without a key and adapts by subject and assessment", 
     emptyLearner(),
     { grade: 4, age: 9 },
   );
-  assert.equal(vocab.expectedResponseType, "text");
+  assert.equal(vocab.expectedResponseType, "choice");
 
   const mastery = sessionFor("equivalent_fractions", "MASTERY_CHECK");
   mastery.decision = {
@@ -136,6 +136,6 @@ test("local renderer works without a key and adapts by subject and assessment", 
   assert.match(teachback.message, /teach it back/);
   assert.equal(
     authoredContent(sessionFor("generate_equivalent")).expectedResponseType,
-    "math",
+    "choice",
   );
 });
